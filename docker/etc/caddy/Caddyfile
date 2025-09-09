@@ -7,9 +7,8 @@
     
     # Docker provider handled automatically by lucaslorentz/caddy-docker-proxy image
     
-    # Local development settings
-    auto_https disable_certs
-    skip_install_trust
+    # Local development settings - enable internal CA for self-signed certs
+    auto_https internal_issuer
 }
 
 # Fallback for any unconfigured domains

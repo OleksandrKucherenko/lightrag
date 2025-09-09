@@ -14,12 +14,9 @@ services:
       - 443:443/udp
     env_file:
       - .env.caddy
-    environment:
-      CADDY_DOCKER_CADDYFILE_PATH: /etc/caddy/Caddyfile
     volumes:
       # access to docker socket for capturing services config
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./docker/etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:
@@ -31,6 +28,46 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # LazyDocker Web UI - Docker Fleet Management
+  monitor:
+    # ref1: https://hub.docker.com/r/mosswill/isaiah
+    # ref2: https://github.com/will-moss/isaiah
+    image: ghcr.io/will-moss/isaiah:latest
+    container_name: monitor
+    restart: unless-stopped
+    env_file:
+      - .env
+      - .env.monitoring
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - frontend
+      - backend
+    labels:
+      # Caddy labels for Isaiah web interface
+      caddy: "https://monitor.localhost"
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+      caddy.basic_auth: "*"
+      caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.3'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
 
 networks:
   frontend:

@@ -1,5 +1,25 @@
 # Light RAG in docker container
 
+## SSL Certificates
+
+```bash
+cd docker/certificates
+# install root certificates
+CAROOT=$(pwd) mkcert -install
+
+# re-generate certificate 
+CAROOT=$(pwd) mkcert -cert-file dev.localhost.pem \
+  -key-file dev.localhost-key.pem \
+  -p12-file dev.localhost.p12 \
+  dev.localhost "*.dev.localhost" \
+  localhost 127.0.0.1 0.0.0.0 ::1
+
+openssl x509 -outform der -in rootCA.pem -out rootCA.crt
+
+# Generate windows compatible certificate format, PFX is PKCS12 format
+openssl pkcs12 -export -out dev.localhost.pfx -inkey dev.localhost-key.pem -in dev.localhost.pem -certfile rootCA.pem -passout "pass:"
+```
+
 ## Caddy
 
 ```bash
@@ -26,5 +46,5 @@ curl -s http://localhost/
 docker run --rm caddy:2-alpine caddy hash-password --plaintext admin
 
 # Test Url
-curl -v http://monitor.localhost --user admin:admin
+curl -v http://monitor.dev.localhost --user admin:admin
  ```

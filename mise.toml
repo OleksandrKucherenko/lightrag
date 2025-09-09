@@ -10,3 +10,6 @@ run = [
 
 [hooks]
 enter = ["mise run setup"]
+
+[tools]
+mkcert = "latest"

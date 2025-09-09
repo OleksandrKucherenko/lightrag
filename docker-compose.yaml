@@ -19,6 +19,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - caddy_data:/data
       - caddy_config:/config
+      - ./docker/certificates:/certificates:ro
     networks:
       - frontend
       - backend
@@ -45,7 +46,7 @@ services:
       - backend
     labels:
       # Caddy labels for Isaiah web interface
-      caddy: "https://monitor.localhost"
+      caddy: "https://monitor.dev.localhost"
       caddy.reverse_proxy: "{{upstreams 3000}}"
       caddy.basic_auth: "*"
       caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"

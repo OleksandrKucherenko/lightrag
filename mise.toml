@@ -1,0 +1,12 @@
+[settings]
+experimental = true
+
+[tasks.setup]
+description = "Preconfigure project folders"
+run = [
+    "mkdir -p docker/data/caddy",
+    "mkdir -p docker/etc/caddy"
+]
+
+[hooks]
+enter = ["mise run setup"]

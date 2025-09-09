@@ -1,0 +1,5 @@
+
+# Keep only configuration in git
+docker/etc/caddy/*
+!docker/etc/caddy/Caddyfile
+docker/data/caddy/*

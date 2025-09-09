@@ -1,0 +1,25 @@
+# Global configuration for local development
+{
+    email admin@local.dev
+    
+    # Use internal CA for local development (no Let's Encrypt)
+    acme_ca internal
+    
+    # Docker provider handled automatically by lucaslorentz/caddy-docker-proxy image
+    
+    # Local development settings
+    auto_https disable_certs
+    skip_install_trust
+}
+
+# Fallback for any unconfigured domains
+:80, :443 {
+    # Health check endpoint
+    respond /health "OK" 200
+    
+    # Default response
+    respond "LightRAG Local Development Stack" 200
+    
+    # Add debug info for local development
+    respond /debug "Environment: local.dev development" 200
+}

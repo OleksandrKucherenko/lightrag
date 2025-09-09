@@ -1,0 +1,7 @@
+{
+    "recommendations": [
+        "matthewpi.caddyfile-support",
+        "mikestead.dotenv",
+        "hverlin.mise-vscode"
+    ]
+}

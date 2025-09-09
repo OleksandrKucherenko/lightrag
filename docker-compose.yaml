@@ -1,0 +1,65 @@
+name: lightrag
+
+services:
+  # Caddy Reverse Proxy with Docker Provider
+  proxy:
+    # ref1: https://hub.docker.com/_/caddy
+    # ref2: https://hub.docker.com/r/lucaslorentz/caddy-docker-proxy, https://github.com/lucaslorentz/caddy-docker-proxy
+    image: lucaslorentz/caddy-docker-proxy:latest
+    container_name: proxy
+    restart: unless-stopped
+    ports:
+      - 80:80
+      - 443:443/tcp
+      - 443:443/udp
+    env_file:
+      - .env.caddy
+    environment:
+      CADDY_DOCKER_CADDYFILE_PATH: /etc/caddy/Caddyfile
+    volumes:
+      # access to docker socket for capturing services config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker/etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - frontend
+      - backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+
+networks:
+  frontend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+          gateway: 172.20.0.1
+  backend:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.21.0.0/24
+          gateway: 172.21.0.1
+
+volumes:
+  # Caddy
+  caddy_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      # Caddy will automatically create sub-folder 
+      device: ./docker/data
+  caddy_config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      # Caddy will automatically create sub-folder 
+      device: ./docker/etc

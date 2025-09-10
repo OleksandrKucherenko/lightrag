@@ -1,5 +1,7 @@
 # Light RAG in docker container
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/OleksandrKucherenko/lightrag)
+
 ## SSL Certificates
 
 ```bash

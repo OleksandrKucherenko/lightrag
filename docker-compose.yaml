@@ -23,13 +23,19 @@ services:
     networks:
       - frontend
       - backend
+    labels:
+      caddy: "https://dev.localhost"
+      caddy.respond: "/health \"OK\" 200"
+      caddy.respond_1: "/debug \"Environment: local.dev development\" 200"
+      caddy.respond_2: "/* \"LightRAG Local Development Stack\" 200"
+      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health" ]
+      test: ["CMD", "/bin/caddy", "validate", "--config", "/config/caddy/Caddyfile"]
       interval: 30s
       timeout: 10s
       retries: 3

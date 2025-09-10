@@ -8,7 +8,7 @@
     # Docker provider handled automatically by lucaslorentz/caddy-docker-proxy image
 
     # Local development settings - enable internal CA for self-signed certs
-    auto_https internal_issuer
+    auto_https prefer_wildcard
 }
 
 # Wildcard certificate for dev.localhost

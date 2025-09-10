@@ -24,8 +24,34 @@ openssl pkcs12 -export -out dev.localhost.pfx -inkey dev.localhost-key.pem -in d
 
 In Powershell Admin:
 
-```pwsh
- Import-Certificate -FilePath rootCA.cer -CertStoreLocation Cert:\LocalMachine\Root
+```powershell
+cd docker\certificates
+# register certificate in 
+sudo Import-Certificate -FilePath rootCA.cer -CertStoreLocation Cert:\LocalMachine\Root
+```
+
+After installation use `chrome://restart` to force Chrome to reload CA certificates.
+
+## DNS Setup
+
+### Windows
+
+Edit file: `C:\Windows\System32\drivers\etc\hosts` 
+```
+# Added by Docker Desktop
+192.168.1.103 host.docker.internal
+192.168.1.103 gateway.docker.internal
+
+# Required
+192.168.1.103 dev.localhost
+192.168.1.103 monitor.dev.localhost
+192.168.1.103 kv.dev.localhost
+192.168.1.103 graph.dev.localhost
+192.168.1.103 *.dev.localhost
+```
+
+```bash
+docker run --rm alpine sh -c "ip route | awk '/default/ { print \$3 }'"
 ```
 
 ## Caddy
@@ -33,7 +59,7 @@ In Powershell Admin:
 ```bash
 # Validate configuration
 docker run --rm \
-    -v "$(pwd)/etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+    -v "$(pwd)/docker/etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
     lucaslorentz/caddy-docker-proxy:latest \
     validate \
     --config /etc/caddy/Caddyfile
@@ -42,9 +68,9 @@ docker run --rm \
 docker compose logs proxy
 
 # Test URL
-curl -s http://localhost/debug
-curl -s http://localhost/health
-curl -s http://localhost/
+curl -s http://dev.localhost/debug
+curl -s http://dev.localhost/health
+curl -s http://dev.localhost/
 ```
 
 ## Lazydocker Web UI

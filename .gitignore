@@ -10,3 +10,16 @@ docker/data/redis/*
 # Graph
 docker/data/memgraph/*
 docker/logs/memgraph/*
+
+# Vectors
+docker/qdrant/storage/*
+docker/qdrant/snapshots/*
+docker/data/qdrant/storage/*
+docker/data/qdrant/snapshots/*
+
+# Rag
+docker/data/lightrag/*
+docker/logs/lightrag/*
+
+# Secrets
+.secrets/

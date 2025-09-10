@@ -54,6 +54,29 @@ Edit file: `C:\Windows\System32\drivers\etc\hosts`
 docker run --rm alpine sh -c "ip route | awk '/default/ { print \$3 }'"
 ```
 
+## Secrets
+
+We use MISE tool secrets support: https://mise.jdx.dev/environments/secrets.html
+
+```shell
+# install globally tools required for encryption/decryption
+mise use -g sops
+mise use -g age
+
+# generate unique key for project
+age-keygen -o .secrets/mise-age.txt
+# Expected output:
+#  Public key: <public key>
+
+# make a copy, so mise can find it automatically (or better setup SOPS_AGE_KEY_FILE variable)
+cp .secrets/mise-age.txt %HOME%/.config/mise/age.txt
+
+# Encrypt JSON file (`-i` means in-place, so file will be replaced by encrypted version)
+sops encrypt -i --age "<public key>" .env.llm.json
+```
+
+You can later decrypt the file with `sops decrypt -i .env.json` or edit it in EDITOR with `sops edit .env.json`. However, you'll first need to set `SOPS_AGE_KEY_FILE` to `~/.config/mise/age.txt` to decrypt the file.
+
 ## Caddy
 
 ```bash

@@ -1,9 +1,27 @@
 [settings]
 experimental = true
 
+[[env]]
+MISE_SOPS_AGE_KEY_FILE = ".secrets/mise-age.txt"
+SOPS_AGE_KEY_FILE = "{{env.MISE_SOPS_AGE_KEY_FILE}}"
+
+[[env]]
+_.file = [".env.llm.json"]
+
 [tasks.setup]
 description = "Pre-configure project folders"
-run = ["mkdir -p docker/data/caddy", "mkdir -p docker/etc/caddy"]
+run = [
+    # caddy
+    "mkdir -p docker/data/caddy",
+    "mkdir -p docker/etc/caddy",
+    # kv
+    "mkdir -p docker/data/redis",
+    # graph
+    "mkdir -p docker/data/memgraph",
+    # vectors
+    "mkdir -p docker/qdrant/storage",
+    "mkdir -p docker/qdrant/snapshots",
+]
 
 [hooks]
 enter = ["mise run setup"]

@@ -32,6 +32,19 @@ sudo Import-Certificate -FilePath rootCA.cer -CertStoreLocation Cert:\LocalMachi
 
 After installation use `chrome://restart` to force Chrome to reload CA certificates.
 
+After sharing the rootCA in project don't forget to reset own root certificate for `mkcert` tool:
+
+```bash
+# On macOS/Linux
+rm -rf "$(mkcert -CAROOT)"
+
+# On Windows (PowerShell)
+Remove-Item -Recurse -Force "$(mkcert -CAROOT)"
+
+# one line that doing all
+mkcert -uninstall && rm -rf "$(mkcert -CAROOT)" && mkcert -install
+```
+
 ## DNS Setup
 
 ### Windows

@@ -1,5 +1,8 @@
 [settings]
 experimental = true
+sops.age_key_file = ".secrets/mise-age.txt"
+sops.rops = false
+verbose = false
 
 [[env]]
 MISE_SOPS_AGE_KEY_FILE = ".secrets/mise-age.txt"
@@ -11,6 +14,8 @@ _.file = [".env.llm.json"]
 [tasks.setup]
 description = "Pre-configure project folders"
 run = [
+    # security storage folder
+    "mkdir -p .secrets",
     # caddy
     "mkdir -p docker/data/caddy",
     "mkdir -p docker/etc/caddy",

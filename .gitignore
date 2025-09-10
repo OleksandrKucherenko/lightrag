@@ -3,3 +3,10 @@
 docker/etc/caddy/*
 !docker/etc/caddy/Caddyfile
 docker/data/caddy/*
+
+# Redis data
+docker/data/redis/*
+
+# Graph
+docker/data/memgraph/*
+docker/logs/memgraph/*

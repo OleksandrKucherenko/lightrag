@@ -50,6 +50,8 @@ services:
     networks:
       - frontend
       - backend
+    depends_on:
+      - proxy
     labels:
       # Caddy labels for Isaiah web interface
       caddy: "https://monitor.dev.localhost"
@@ -89,6 +91,8 @@ services:
       # Caddy labels for Redis web interface
       caddy: "https://kv.dev.localhost"
       caddy.reverse_proxy: "{{upstreams 6379}}"
+    depends_on:
+      - proxy
     tmpfs:
       - /tmp
       - /var/run
@@ -122,6 +126,76 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  # Memgraph - Graph Storage
+  graph:
+    # ref: https://hub.docker.com/r/memgraph/memgraph-mage
+    image: memgraph/memgraph-mage:latest
+    container_name: graph
+    restart: unless-stopped
+    env_file:
+      - .env
+      - .env.databases
+    command: >
+      --log-level=WARNING --also-log-to-stderr=true --memory-limit=4096 --storage-properties-on-edges=true --storage-snapshot-interval-sec=300 --storage-wal-enabled=true --data-recovery-on-startup=true --telemetry-enabled=false
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+      - memgraph_log:/var/log/memgraph
+    networks:
+      - backend
+    healthcheck:
+      test: [ "CMD-SHELL", "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 --use-ssl=false || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Memgraph Lab (Web UI for graph visualization)
+  graph-ui:
+    # ref: https://hub.docker.com/r/memgraph/lab
+    image: memgraph/lab:3.5.0
+    container_name: graph-ui
+    restart: unless-stopped
+    env_file:
+      - .env
+      - .env.databases
+    networks:
+      - backend
+    labels:
+      # Caddy labels for automatic subdomain routing
+      caddy: "https://graph.dev.localhost"
+      caddy.reverse_proxy: "{{upstreams 3000}}"
+      # caddy.basic_auth: "*"
+      # caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
+      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
+    depends_on:
+      - proxy
+      - graph
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
 
 networks:
   frontend:
@@ -161,3 +235,16 @@ volumes:
       type: none
       o: bind
       device: ./docker/data/redis
+  # Graph
+  memgraph_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./docker/data/memgraph
+  memgraph_log:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./docker/logs/memgraph

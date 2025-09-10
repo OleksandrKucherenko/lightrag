@@ -28,6 +28,12 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # LazyDocker Web UI - Docker Fleet Management
   monitor:
@@ -71,6 +77,52 @@ services:
         max-size: "5m"
         max-file: "2"
 
+  # Redis - KV Storage & Document Status Storage
+  kv:
+    # ref: https://hub.docker.com/_/redis
+    image: redis:8-alpine
+    container_name: kv
+    restart: unless-stopped
+    user: "999:999"
+    read_only: true
+    labels:
+      # Caddy labels for Redis web interface
+      caddy: "https://kv.dev.localhost"
+      caddy.reverse_proxy: "{{upstreams 6379}}"
+    tmpfs:
+      - /tmp
+      - /var/run
+    env_file:
+      - .env
+      - .env.databases
+    ports:
+      - 6379:6379
+    command: >
+      redis-server  --requirepass ${REDIS_PASSWORD} --appendonly yes --appendfsync everysec --save 900 1 --save 300 10 --save 60 10000 --maxmemory 1gb --maxmemory-policy allkeys-lru --tcp-keepalive 300 --timeout 300
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
   frontend:
     driver: bridge
@@ -102,3 +154,10 @@ volumes:
       o: bind
       # Caddy will automatically create sub-folder 
       device: ./docker/etc
+  # Application Data
+  redis_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./docker/data/redis

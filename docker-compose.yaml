@@ -50,6 +50,7 @@ services:
       caddy.reverse_proxy: "{{upstreams 3000}}"
       caddy.basic_auth: "*"
       caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
+      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
     deploy:
       resources:
         limits:

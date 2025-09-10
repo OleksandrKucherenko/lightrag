@@ -14,10 +14,18 @@ CAROOT=$(pwd) mkcert -cert-file dev.localhost.pem \
   dev.localhost "*.dev.localhost" \
   localhost 127.0.0.1 0.0.0.0 ::1
 
+# prepare for Windows HOST machine
 openssl x509 -outform der -in rootCA.pem -out rootCA.crt
+openssl x509 -inform PEM -in rootCA.pem -outform DER -out rootCA.cer
 
 # Generate windows compatible certificate format, PFX is PKCS12 format
 openssl pkcs12 -export -out dev.localhost.pfx -inkey dev.localhost-key.pem -in dev.localhost.pem -certfile rootCA.pem -passout "pass:"
+```
+
+In Powershell Admin:
+
+```pwsh
+ Import-Certificate -FilePath rootCA.cer -CertStoreLocation Cert:\LocalMachine\Root
 ```
 
 ## Caddy

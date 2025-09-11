@@ -1,7 +1,10 @@
 {
     "cSpell.words": [
+        "Lazydocker",
         "lightrag",
         "memgraph",
-        "qdrant"
+        "mkcert",
+        "qdrant",
+        "rops"
     ]
 }

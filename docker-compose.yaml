@@ -67,14 +67,14 @@ services:
       caddy.basic_auth: "*"
       caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
       caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-          cpus: '0.3'
-        reservations:
-          memory: 128M
-          cpus: '0.1'
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 256M
+    #       cpus: '0.3'
+    #     reservations:
+    #       memory: 128M
+    #       cpus: '0.1'
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000" ]
       interval: 30s
@@ -354,13 +354,13 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: ./docker/qdrant/storage
+      device: ./docker/data/qdrant/storage
   qdrant_snapshots:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ./docker/qdrant/snapshots
+      device: ./docker/data/qdrant/snapshots
   # Rag
   lightrag_storage:
     driver: local

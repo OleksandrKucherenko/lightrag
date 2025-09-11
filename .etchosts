@@ -1,0 +1,5 @@
+127.0.0.1 dev.localhost
+127.0.0.1 monitor.dev.localhost
+127.0.0.1 kv.dev.localhost
+127.0.0.1 graph.dev.localhost
+127.0.0.1 rag.dev.localhost

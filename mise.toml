@@ -1,8 +1,9 @@
 [settings]
 experimental = true
+verbose = false                             # enable if SOPS is failing or you need more debug details
 sops.age_key_file = ".secrets/mise-age.txt"
-sops.rops = false
-verbose = false
+sops.rops = false                           # use original SOPS binary not a rops library
+sops.strict = false                         # if age key is not provided do not raise an ERROR
 
 [[env]]
 MISE_SOPS_AGE_KEY_FILE = ".secrets/mise-age.txt"
@@ -24,12 +25,15 @@ run = [
     # graph
     "mkdir -p docker/data/memgraph",
     # vectors
-    "mkdir -p docker/qdrant/storage",
-    "mkdir -p docker/qdrant/snapshots",
+    "mkdir -p docker/data/qdrant/storage",
+    "mkdir -p docker/data/qdrant/snapshots",
 ]
 
 [hooks]
 enter = ["mise run setup"]
 
 [tools]
+age = "latest"
+hostctl = "latest"
 mkcert = "latest"
+sops = "latest"

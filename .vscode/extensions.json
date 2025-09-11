@@ -2,6 +2,8 @@
     "recommendations": [
         "matthewpi.caddyfile-support",
         "mikestead.dotenv",
-        "hverlin.mise-vscode"
+        "hverlin.mise-vscode",
+        "yzhang.markdown-all-in-one",
+        "bierner.markdown-mermaid"
     ]
 }

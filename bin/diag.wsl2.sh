@@ -357,6 +357,60 @@ function check_dns_resolution() {
     fi
 }
 
+# Show Linux hosts file configuration
+function show_linux_hosts() {
+    log "section" "Linux Hosts Configuration"
+    
+    if [ -f "/etc/hosts" ]; then
+        if [ -r "/etc/hosts" ]; then
+            log "info" "Contents of /etc/hosts:"
+            
+            # Check if /etc/hosts is a symlink
+            if [ -L "/etc/hosts" ]; then
+                target=$(readlink -f "/etc/hosts")
+                log "info" "Note: /etc/hosts is a symlink to ${target}"
+            fi
+            
+            # Display hosts entries with highlighting, filter out comments and empty/whitespace lines
+            cat /etc/hosts | grep -v "^#" | grep -v "^[[:space:]]*$" | while read -r line; do
+                log "info" " |  $line"
+            done
+        else
+            log "error" "/etc/hosts exists but is not readable (permission denied)"
+        fi
+    else
+        log "gray" "/etc/hosts file does not exist"
+    fi
+}
+
+# Show Windows hosts file configuration
+function show_windows_hosts() {
+    log "section" "Windows Hosts Configuration"
+    
+    # Check if Windows drive is mounted
+    if [ -d "/mnt/c/Windows" ]; then
+        local windows_hosts="/mnt/c/Windows/System32/drivers/etc/hosts"
+        
+        if [ -f "$windows_hosts" ]; then
+            if [ -r "$windows_hosts" ]; then
+                log "info" "Contents of C:/Windows/System32/drivers/etc/hosts:"
+                
+                # Display hosts entries with highlighting, filter out comments and empty/whitespace lines
+                cat "$windows_hosts" | grep -v "^#" | grep -v "^[[:space:]]*$" | while read -r line; do
+                    log "info" " |  $line"
+                done
+            else
+                log "error" "Windows hosts file exists but is not readable (permission denied)"
+                log "gray" "Try running WSL as administrator or check file permissions"
+            fi
+        else
+            log "gray" "Windows hosts file not found at C:/Windows/System32/drivers/etc/hosts"
+        fi
+    else
+        log "gray" "Windows drive not mounted at /mnt/c - cannot access Windows hosts file"
+    fi
+}
+
 # Report header
 log "separator"
 log "header" "WSL2 Network Configuration Report"
@@ -385,6 +439,10 @@ log "info" "\nWSL-specific DNS configuration:"
 show_wsl_config
 show_windows_dns
 check_dns_resolution
+
+# Hosts file configuration
+show_linux_hosts
+show_windows_hosts
 
 log "gray" ""
 log "separator"

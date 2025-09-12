@@ -27,6 +27,10 @@ run = [
     # vectors
     "mkdir -p docker/data/qdrant/storage",
     "mkdir -p docker/data/qdrant/snapshots",
+    # rag
+    "mkdir -p docker/data/lightrag/storage",
+    "mkdir -p docker/data/lightrag/inputs",
+    "mkdir -p docker/logs/lightrag",
 ]
 
 [hooks]

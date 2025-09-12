@@ -13,6 +13,9 @@ BLUE="$(tput setaf 4)"
 RED="$(tput setaf 1)"
 NC="$(tput sgr0)"
 
+# Docker default bridge network
+DOCKER_IP="172.17.0.1"
+
 # compose regex for matching ipv6 in GNU grep style, print it to STDOUT
 function ipv6:grep() {
     local ipv6_zone="fe80:(:[0-9a-f]{1,4}){0,7}%[a-z0-9_.-]+"                                            # Link-local IPv6 addresses with zone identifiers
@@ -104,34 +107,104 @@ function log() {
     esac
 }
 
+# Helpers: Query Windows networking from WSL using PowerShell (single-quoted to avoid Bash $ expansion)
+function get_windows_lan_ip() {
+    if ! command -v powershell.exe &>/dev/null; then
+        return 1
+    fi
+
+    # Prefer interface whose gateway is 192.168.*; fallback to any 192.168.* on an Up adapter
+    powershell.exe -NoProfile -Command '
+        $c = Get-NetIPConfiguration | Where-Object { $_.NetAdapter.Status -eq "Up" -and $_.IPv4Address -ne $null };
+        $lan = $c | Where-Object { $_.IPv4DefaultGateway -ne $null -and $_.IPv4DefaultGateway.NextHop -like "192.168.*" } | Select-Object -First 1;
+        if (-not $lan) { $lan = $c | Where-Object { $_.IPv4Address.IPAddress -like "192.168.*" } | Select-Object -First 1 };
+        if ($lan) { $lan.IPv4Address.IPAddress }
+    ' | tr -d "\r"
+}
+
+function get_windows_default_route() {
+    if ! command -v powershell.exe &>/dev/null; then
+        return 1
+    fi
+
+    powershell.exe -NoProfile -Command '
+        $r = Get-NetRoute -DestinationPrefix 0.0.0.0/0 | Sort-Object RouteMetric, InterfaceMetric | Select-Object -First 1;
+        if ($r) { "{0}|{1}" -f $r.InterfaceAlias, $r.NextHop }
+    ' | tr -d "\r"
+}
+
+function get_windows_default_route_ip() {
+    if ! command -v powershell.exe &>/dev/null; then
+        return 1
+    fi
+
+    powershell.exe -NoProfile -Command '
+        $r = Get-NetRoute -DestinationPrefix 0.0.0.0/0 | Sort-Object RouteMetric, InterfaceMetric | Select-Object -First 1;
+        if ($r) { (Get-NetIPConfiguration -InterfaceIndex $r.ifIndex).IPv4Address.IPAddress }
+    ' | tr -d "\r"
+}
+
+function get_docker_network_name_by_ip() {
+    local ip=$1
+
+    docker network ls --format '{{.Name}}' | while read -r net; do
+        if [[ "$net" != "bridge" && "$net" != "host" && "$net" != "none" ]]; then
+            gateway=$(docker network inspect "$net" --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}' 2>/dev/null)
+
+            if [[ "$gateway" == "$ip" ]]; then
+                echo "$net"
+                break
+            fi
+        fi
+    done    
+}
+
 # Print all IPs with descriptions
 function show_all_ips() {
     log "section" "All IP addresses"
+
+    # host-gateway resolving
+    HOST_DOCKER_INTERNAL=$(docker run --add-host=host.docker.internal:host-gateway \
+        --rm busybox sh -c "ping host.docker.internal -c 1" \
+        | grep 'bytes from' | awk -F: '{print $1}' | awk '{print $4}')
+
+    # Try to obtain Windows LAN IP and default-route info
+    WINDOWS_LAN_IP=$(get_windows_lan_ip)
+    # Resolve the IPv4 bound to the default-route interface
+    DEFAULT_ROUTE_IP=$(get_windows_default_route_ip)    
+    # Get default route info
+    DEFAULT_ROUTE_INFO=$(get_windows_default_route)
+    DEFAULT_ROUTE_ALIAS=""
+    DEFAULT_ROUTE_NEXTHOP=""
+    if [[ -n "$DEFAULT_ROUTE_INFO" ]]; then
+        DEFAULT_ROUTE_ALIAS="${DEFAULT_ROUTE_INFO%%|*}"
+        DEFAULT_ROUTE_NEXTHOP="${DEFAULT_ROUTE_INFO#*|}"        
+    fi
+
+    # Expand the list with discovered host IPs for annotation
     ALL_IPS=$(hostname -I)
+    ALL_IPS+=" ${HOST_DOCKER_INTERNAL} "
+    if [[ -n "$WINDOWS_LAN_IP" ]]; then ALL_IPS+=" ${WINDOWS_LAN_IP} "; fi
+
+    # make ALL_IPS items unique
+    ALL_IPS=$(echo "${ALL_IPS}" | xargs -n1 | sort -u | xargs)
+
     for ip in ${ALL_IPS}; do
         log "info" "${ip} - " "nonl"
 
         # Check IP patterns for known network types
-        if [[ "${ip}" == "172.17.0.1" ]]; then
+        if [[ "${ip}" == "${HOST_DOCKER_INTERNAL}" ]]; then
+            log "info" "Host Docker Internal ${GREEN}host.docker.internal${NC}"
+        elif [[ -n "$WINDOWS_LAN_IP" && "${ip}" == "${WINDOWS_LAN_IP}" ]]; then
+            log "info" "Windows LAN IP (${BLUE}Wi‑Fi/Ethernet${NC})"
+        elif [[ "${ip}" == "${DOCKER_IP}" ]]; then
             log "info" "Docker default bridge network"
         elif [[ "${ip}" =~ 172\.[0-9]+\.0\.1 ]]; then
-            # Try to get Docker network name if available
-            if command -v docker &>/dev/null; then
-                # Find the network that has this IP as gateway
-                network_name=$(docker network ls --format '{{.Name}}' | while read -r net; do
-                    if [[ "$net" != "bridge" && "$net" != "host" && "$net" != "none" ]]; then
-                        gateway=$(docker network inspect "$net" --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}' 2>/dev/null)
-                        if [[ "$gateway" == "$ip" ]]; then
-                            echo "$net"
-                            break
-                        fi
-                    fi
-                done)
-                if [[ -n "${network_name}" ]]; then
-                    log "info" "Docker network: ${BLUE}${network_name}${NC}"
-                else
-                    log "info" "Docker custom network bridge"
-                fi
+            # Find the network that has this IP as gateway
+            network_name=$(get_docker_network_name_by_ip "${ip}")
+
+            if [[ -n "${network_name}" ]]; then
+                log "info" "Docker network: ${BLUE}${network_name}${NC}"
             else
                 log "info" "Docker custom network bridge"
             fi
@@ -139,6 +212,18 @@ function show_all_ips() {
             log "info" "Main WSL2 network interface"
         fi
     done
+
+    # Heuristic VPN/enterprise route detection and notice
+    if [[ -n "$DEFAULT_ROUTE_IP" && -n "$WINDOWS_LAN_IP" && "$DEFAULT_ROUTE_IP" != "$WINDOWS_LAN_IP" ]]; then
+        # If default-route IP is not a typical home LAN 192.168.x.x, warn user
+        if [[ ! "$DEFAULT_ROUTE_IP" =~ ^192\.168\.[0-9]+\.[0-9]+$ ]]; then
+            log "gray" ""
+            log "gray" "Windows default route prefers '${BLUE}${DEFAULT_ROUTE_ALIAS}${GRAY}' (${DEFAULT_ROUTE_IP}${GRAY}, next hop ${DEFAULT_ROUTE_NEXTHOP}${GRAY})."
+            log "gray" "A VPN or enterprise adapter may be active."
+            log "gray" ""
+            log "gray" "Using LAN IP ${WINDOWS_LAN_IP} ${GRAY}for local host mappings.${NC}"
+        fi
+    fi
 }
 
 # Network interfaces section with color coding for DOWN interfaces

@@ -4,6 +4,7 @@
         "mikestead.dotenv",
         "hverlin.mise-vscode",
         "yzhang.markdown-all-in-one",
-        "bierner.markdown-mermaid"
+        "bierner.markdown-mermaid",
+        "ms-azuretools.vscode-docker"
     ]
 }

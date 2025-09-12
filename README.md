@@ -12,6 +12,7 @@
     - [DNS Setup](#dns-setup)
       - [Windows](#windows-1)
       - [Configure DNS via hostctl](#configure-dns-via-hostctl)
+      - [From WSL2: publish subdomains to Windows hosts via hostctl (auto)](#from-wsl2-publish-subdomains-to-windows-hosts-via-hostctl-auto)
     - [LLM Secrets](#llm-secrets)
   - [Services](#services)
     - [Caddy](#caddy)
@@ -179,6 +180,47 @@ Inside `C:/Windows/System32/Drivers/etc/hosts` file you can find:
 127.0.0.1 rag.dev.localhost
 # end
 ```
+
+#### From WSL2: publish subdomains to Windows hosts via hostctl (auto)
+
+Use this when running inside WSL2 to automatically detect your Windows LAN IP from the diagnostics report, transform `.etchosts` to use that IP (instead of `127.0.0.1`), and publish it to the Windows `hosts` file using `hostctl` with elevation via `gsudo`.
+
+Prerequisites (in Windows PowerShell):
+
+```powershell
+scoop install main/hostctl
+scoop install main/gsudo
+```
+
+Run in WSL2 at the project root:
+
+```bash
+# 1) Detect Windows LAN IP from diagnostics (strip ANSI color codes safely)
+WIN_LAN_IP=$(bash bin/diag.wsl2.sh | sed -r 's/\x1B\[[0-9;]*[A-Za-z]//g' | awk '/Windows LAN IP/ {print $1; exit}')
+
+# 2) Prepare a temp file visible to Windows with the IP substituted
+WSL_TMP="/mnt/c/Temp/lightrag-hosts.txt"
+WIN_TMP="C:\\Temp\\lightrag-hosts.txt"
+mkdir -p /mnt/c/Temp
+sed "s/127\\.0\\.0\\.1/${WIN_LAN_IP}/g" .etchosts > "$WSL_TMP"
+
+# 3) Publish to Windows hosts with elevation (UAC prompt may appear once)
+powershell.exe -NoProfile -Command "sudo hostctl replace lightrag --from \"$WIN_TMP\"; sudo hostctl enable lightrag"
+
+# Optional: verify
+powershell.exe -NoProfile -Command "Get-Content C:\\Windows\\System32\\drivers\\etc\\hosts | Select-String -NotMatch '^#|^$'"
+```
+
+One‑liner version:
+
+```bash
+WIN_LAN_IP=$(bash bin/diag.wsl2.sh | sed -r 's/\x1B\[[0-9;]*[A-Za-z]//g' | awk '/Windows LAN IP/ {print $1; exit}'); WSL_TMP="/mnt/c/Temp/lightrag-hosts.txt"; WIN_TMP="C:\\Temp\\lightrag-hosts.txt"; mkdir -p /mnt/c/Temp; sed "s/127\\.0\\.0\\.1/${WIN_LAN_IP}/g" .etchosts > "$WSL_TMP"; powershell.exe -NoProfile -Command "sudo hostctl replace lightrag --from \"$WIN_TMP\"; sudo hostctl enable lightrag"; powershell.exe -NoProfile -Command "Get-Content C:\\Windows\\System32\\drivers\\etc\\hosts | Select-String -NotMatch '^#|^$'"
+```
+
+Notes:
+- The IP is taken from the diagnostics section where entries are annotated as `Windows LAN IP (Wi‑Fi/Ethernet)`.
+- If `WIN_LAN_IP` ends up empty, ensure `powershell.exe` is available from WSL and that the diagnostics show a `Windows LAN IP` entry.
+- `sudo` will request elevation the first time; keep the window focused to accept the UAC prompt.
 
 ### LLM Secrets
 

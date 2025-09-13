@@ -17,6 +17,7 @@
   - [Services](#services)
     - [Caddy](#caddy)
     - [Lazydocker Web UI](#lazydocker-web-ui)
+    - [Open WebUI](#open-webui)
 
 
 ## Developer Environment setup
@@ -131,7 +132,8 @@ brew install guumaster/tap/hostctl
 #### Windows
 
 Edit file: `C:\Windows\System32\drivers\etc\hosts` 
-```
+
+```txt
 # Added by Docker Desktop
 192.168.1.103 host.docker.internal
 192.168.1.103 gateway.docker.internal
@@ -167,7 +169,7 @@ sudo hostctl enable lightrag
 
 Inside `C:/Windows/System32/Drivers/etc/hosts` file you can find:
 
-```
+```txt
 ##################################################################
 # Content under this line is handled by hostctl. DO NOT EDIT.
 ##################################################################
@@ -183,11 +185,11 @@ Inside `C:/Windows/System32/Drivers/etc/hosts` file you can find:
 
 #### From WSL2: publish subdomains to Windows hosts via hostctl (auto)
 
-Use this when running inside WSL2 to automatically detect your Windows LAN IP from the diagnostics report, transform `.etchosts` to use that IP (instead of `127.0.0.1`), and publish it to the Windows `hosts` file using `hostctl` with elevation via `gsudo`.
+Use this when running inside WSL2 to automatically detect your Windows LAN IP from the diagnostics report, transform `.etchosts` to use that IP (instead of `127.0.0.1`), and publish it to the Windows `hosts` file using `hostctl` with elevation via `sudo`.
 
 Prerequisites (in Windows PowerShell):
 
-```powershell
+```shell
 scoop install main/hostctl
 scoop install main/gsudo
 ```
@@ -214,7 +216,12 @@ powershell.exe -NoProfile -Command "Get-Content C:\\Windows\\System32\\drivers\\
 One‑liner version:
 
 ```bash
-WIN_LAN_IP=$(bash bin/diag.wsl2.sh | sed -r 's/\x1B\[[0-9;]*[A-Za-z]//g' | awk '/Windows LAN IP/ {print $1; exit}'); WSL_TMP="/mnt/c/Temp/lightrag-hosts.txt"; WIN_TMP="C:\\Temp\\lightrag-hosts.txt"; mkdir -p /mnt/c/Temp; sed "s/127\\.0\\.0\\.1/${WIN_LAN_IP}/g" .etchosts > "$WSL_TMP"; powershell.exe -NoProfile -Command "sudo hostctl replace lightrag --from \"$WIN_TMP\"; sudo hostctl enable lightrag"; powershell.exe -NoProfile -Command "Get-Content C:\\Windows\\System32\\drivers\\etc\\hosts | Select-String -NotMatch '^#|^$'"
+WIN_LAN_IP=$(bash bin/diag.wsl2.sh | sed -r 's/\x1B\[[0-9;]*[A-Za-z]//g' | awk '/Windows LAN IP/ {print $1; exit}'); \
+  WSL_TMP="/mnt/c/Temp/lightrag-hosts.txt"; \
+  WIN_TMP="C:\\Temp\\lightrag-hosts.txt"; \
+  mkdir -p /mnt/c/Temp; sed "s/127\\.0\\.0\\.1/${WIN_LAN_IP}/g" .etchosts > "$WSL_TMP"; \
+  powershell.exe -NoProfile -Command "sudo hostctl replace lightrag --from \"$WIN_TMP\"; sudo hostctl enable lightrag"; \
+  powershell.exe -NoProfile -Command "Get-Content C:\\Windows\\System32\\drivers\\etc\\hosts | Select-String -NotMatch '^#|^$'"
 ```
 
 Notes:
@@ -282,3 +289,16 @@ docker run --rm caddy:2-alpine caddy hash-password --plaintext admin
 # Test Url
 curl -v http://monitor.dev.localhost --user admin:admin
  ```
+
+### Open WebUI
+
+```bash
+# verify connections
+docker compose exec webui python -c "import requests; print('RAG API Status:', requests.get('http://rag:9621/health').status_code)" 2>/dev/null || echo "Testing internal connectivity..."
+
+# Verify Caddy redirect
+curl -s -o /dev/null -w "%{http_code}" http://webui.dev.localhost || echo "DNS or Caddy routing issue"
+
+# Verify webui
+curl -k -s -o /dev/null -w "%{http_code}" https://webui.dev.localhost || echo "HTTPS issue"
+```

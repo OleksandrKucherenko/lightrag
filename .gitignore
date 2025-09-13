@@ -23,3 +23,6 @@ docker/logs/lightrag/*
 
 # Secrets
 .secrets/
+
+# OpenWeb UI
+docker/data/openwebui/*

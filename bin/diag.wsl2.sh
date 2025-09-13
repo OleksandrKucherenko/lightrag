@@ -496,40 +496,44 @@ function show_windows_hosts() {
     fi
 }
 
-# Report header
-log "separator"
-log "header" "WSL2 Network Configuration Report"
-log "info" "Generated: $(date)"
-log "separator"
+function main() {
+    # Report header
+    log "separator"
+    log "header" "WSL2 Network Configuration Report"
+    log "info" "Generated: $(date)"
+    log "separator"
 
-detect_wsl_version
+    detect_wsl_version
 
-# WSL2 IP Addresses section
-log "section" "WSL2 IP Addresses"
-log "info" "Primary WSL2 IP: $(hostname -I | awk '{print $1}')"
-log "info" "Windows Host IP: $(ip route | grep default | awk '{print $3}')"
+    # WSL2 IP Addresses section
+    log "section" "WSL2 IP Addresses"
+    log "info" "Primary WSL2 IP: $(hostname -I | awk '{print $1}')"
+    log "info" "Windows Host IP: $(ip route | grep default | awk '{print $3}')"
 
-show_all_ips
-show_network_interfaces
-show_docker_info
-show_listening_ports
+    show_all_ips
+    show_network_interfaces
+    show_docker_info
+    show_listening_ports
 
-# DNS Configuration
-log "section" "DNS Configuration"
-show_resolv_conf
-show_systemd_resolved
+    # DNS Configuration
+    log "section" "DNS Configuration"
+    show_resolv_conf
+    show_systemd_resolved
 
-# WSL-specific DNS configuration
-log "info" "\nWSL-specific DNS configuration:"
-show_wsl_config
-show_windows_dns
-check_dns_resolution
+    # WSL-specific DNS configuration
+    log "info" "\nWSL-specific DNS configuration:"
+    show_wsl_config
+    show_windows_dns
+    check_dns_resolution
 
-# Hosts file configuration
-show_linux_hosts
-show_windows_hosts
+    # Hosts file configuration
+    show_linux_hosts
+    show_windows_hosts
 
-log "gray" ""
-log "separator"
-log "header" "End of Network Report"
-log "separator"
+    log "gray" ""
+    log "separator"
+    log "header" "End of Network Report"
+    log "separator"
+}
+
+main "$@"

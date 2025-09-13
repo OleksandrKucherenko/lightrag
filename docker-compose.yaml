@@ -275,6 +275,9 @@ services:
     env_file:
       - .env
       - .env.lightrag
+    environment:
+      - LLM_BINDING_API_KEY=${LLM_BINDING_API_KEY}
+      - EMBEDDING_BINDING_API_KEY=${EMBEDDING_BINDING_API_KEY}
     volumes:
       - lightrag_storage:/app/data/rag_storage
       - lightrag_inputs:/app/data/inputs
@@ -291,6 +294,52 @@ services:
       # caddy.basic_auth: "*"
       # caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
       caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Open WebUI Frontend
+  webui:
+    # ref: https://github.com/open-webui/open-webui
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: webui
+    restart: unless-stopped
+    depends_on:
+      - proxy
+      - rag
+      - kv
+      - vectors
+    env_file:
+      - .env
+      - .env.openwebui
+    volumes:
+      - openwebui_data:/app/backend/data
+    networks:
+      - frontend
+      - backend
+    ports:
+      - 3000:8080
+    labels:
+      # Caddy labels for automatic subdomain routing
+      caddy: "https://webui.dev.localhost"
+      caddy.reverse_proxy: "{{upstreams 8080}}"
+      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
     logging:
       driver: "json-file"
       options:
@@ -380,3 +429,10 @@ volumes:
       type: none
       o: bind
       device: ./docker/logs/lightrag
+  # OpenWebUI Data
+  openwebui_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./docker/data/openwebui

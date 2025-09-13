@@ -31,6 +31,8 @@ run = [
     "mkdir -p docker/data/lightrag/storage",
     "mkdir -p docker/data/lightrag/inputs",
     "mkdir -p docker/logs/lightrag",
+    # webui
+    "mkdir -p docker/data/openwebui",
 ]
 
 [hooks]

@@ -19,7 +19,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - caddy_data:/data
       - caddy_config:/config
-      - ./docker/certificates:/certificates:ro
+      - ./docker/ssl:/certificates:ro
     networks:
       - frontend
       - backend
@@ -314,6 +314,8 @@ services:
     env_file:
       - .env
       - .env.openwebui
+    environment:
+      - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL:-admin@lightrag.local}
     volumes:
       - openwebui_data:/app/backend/data
     networks:

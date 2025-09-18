@@ -13,7 +13,7 @@
       - [Windows](#windows-1)
       - [Configure DNS via hostctl](#configure-dns-via-hostctl)
       - [From WSL2: publish subdomains to Windows hosts via hostctl (auto)](#from-wsl2-publish-subdomains-to-windows-hosts-via-hostctl-auto)
-    - [LLM Secrets](#llm-secrets)
+    - [Solution Secrets](#solution-secrets)
   - [Services](#services)
     - [Caddy](#caddy)
     - [Lazydocker Web UI](#lazydocker-web-ui)
@@ -229,11 +229,13 @@ Notes:
 - If `WIN_LAN_IP` ends up empty, ensure `powershell.exe` is available from WSL and that the diagnostics show a `Windows LAN IP` entry.
 - `sudo` will request elevation the first time; keep the window focused to accept the UAC prompt.
 
-### LLM Secrets
+### Solution Secrets
 
 We use MISE tool secrets support: https://mise.jdx.dev/environments/secrets.html
 
 You will need OpenAI api key with enabled access to embedding and chat models. Open https://platform.openai.com/api-keys and create a new API key.
+
+In addition to that we will need a real email address for the administrator account.
 
 ```shell
 # install globally tools required for encryption/decryption
@@ -248,10 +250,10 @@ age-keygen -o .secrets/mise-age.txt
 # make a copy, so mise can find it automatically (or better setup SOPS_AGE_KEY_FILE variable)
 cp .secrets/mise-age.txt %HOME%/.config/mise/age.txt
 
-# You can use .env.llm.example.json for composing own secrets storage and then simply encrypt it
+# You can use .env.secrets.example.json for composing own secrets storage and then simply encrypt it
 
 # Encrypt JSON file (`-i` means in-place, so file will be replaced by encrypted version)
-sops encrypt -i --age "<public key>" .env.llm.json
+sops encrypt -i --age "<public key>" .env.secrets.json
 
 ```
 

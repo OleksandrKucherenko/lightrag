@@ -72,7 +72,15 @@ ls -la ./docker/data/ | grep lobechat
 # Expected output: drwxr-xr-x ... lobechat
 ```
 
-#### C. Update Automation & Ignore Rules
+#### C. LightRAG API Access
+- Add `/v1/*` to the LightRAG whitelist so OpenAI-compatible requests from LobeChat do not need a custom `X-API-Key` header in development:
+  ```bash
+  # .env.lightrag
+  WHITELIST_PATHS=/health,/api/*,/v1/*
+  ```
+  Restart the `rag` container after adjusting the value.
+
+#### D. Update Automation & Ignore Rules
 - Extend the `mise` bootstrap task so the new bind mount exists before Compose starts:
   ```toml
   # mise.toml
@@ -87,7 +95,7 @@ ls -la ./docker/data/ | grep lobechat
   ```
 - Keep runtime data outside version control by adding `docker/data/lobechat/*` to `.gitignore` next to the other volume paths.
 
-#### D. DNS Profile Update
+#### E. DNS Profile Update
 - Add the new subdomain to `.etchosts` (or your hostctl profile) so Caddy can be reached locally:
   ```text
   127.0.0.1 lobechat.dev.localhost
@@ -221,6 +229,9 @@ docker compose ps lobechat
 ```bash
 # Test internal connectivity to LightRAG
 docker compose exec -T lobechat sh -c "wget -qO- http://rag:9621/health" | jq '.status'
+
+# Fetch simulated Ollama models from LightRAG
+curl -sk https://rag.dev.localhost/api/tags | jq '.models[].name'
 
 # Verify Redis auth from container logs
 docker compose logs lobechat | grep -i "redis"

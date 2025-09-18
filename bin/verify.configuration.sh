@@ -292,6 +292,17 @@ check_lightrag_api() {
   fi
 }
 
+check_lightrag_ollama() {
+  log_section "LightRAG Ollama API"
+  local status=0 body=""
+  fetch_url "GET" "https://rag.dev.localhost/api/tags" status body -H "Accept: application/json"
+  if [[ "$status" -eq 200 ]] && echo "$body" | jq -e '.models | map(select(.name == "lightrag:latest")) | length > 0' >/dev/null 2>&1; then
+    record_result "ollama:models" "PASS" "lightrag:latest available via /api/tags"
+  else
+    record_result "ollama:models" "FAIL" "Status=${status}, Body snippet=$(echo "$body" | head -c 120)"
+  fi
+}
+
 check_webui_flow() {
   log_section "Open WebUI"
   local url="https://webui.dev.localhost/"
@@ -384,6 +395,7 @@ main() {
   check_qdrant_security
   check_memgraph_access
   check_lightrag_api
+  check_lightrag_ollama
   check_webui_flow
   check_lobechat_ui
 

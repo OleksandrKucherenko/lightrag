@@ -59,6 +59,7 @@ ENABLE_LANGFUSE=false
 TELEMETRY_ENABLED=false
 LOG_LEVEL=info
 ```
+- Store sensitive overrides (e.g., `LOBECHAT_ACCESS_CODE`) in `.env` or managed secrets if you do not want them committed with the LobeChat env file.
 
 #### B. Create Data Directory
 ```bash
@@ -70,6 +71,28 @@ chmod 755 ./docker/data/lobechat
 ls -la ./docker/data/ | grep lobechat
 # Expected output: drwxr-xr-x ... lobechat
 ```
+
+#### C. Update Automation & Ignore Rules
+- Extend the `mise` bootstrap task so the new bind mount exists before Compose starts:
+  ```toml
+  # mise.toml
+  [tasks.setup]
+  run = [
+      "mkdir -p docker/data/caddy",
+      "mkdir -p docker/etc/caddy",
+      # ...existing entries...
+      "mkdir -p docker/data/openwebui",
+      "mkdir -p docker/data/lobechat",
+  ]
+  ```
+- Keep runtime data outside version control by adding `docker/data/lobechat/*` to `.gitignore` next to the other volume paths.
+
+#### D. DNS Profile Update
+- Add the new subdomain to `.etchosts` (or your hostctl profile) so Caddy can be reached locally:
+  ```text
+  127.0.0.1 lobechat.dev.localhost
+  ```
+- Re-run `hostctl replace lightrag --from .etchosts && hostctl enable lightrag` if you rely on the automation.
 
 ### 3. Docker Compose Changes
 
@@ -178,6 +201,13 @@ docker compose logs -f lobechat
 ```
 
 ### 6. Verification & Testing
+
+#### Prep: Extend Automated Verification
+- Append `lobechat` to the service list inside `check_compose_services` in `bin/verify.configuration.sh` so the script enforces container health.
+- Add a new `check_lobechat_ui` helper that:
+  - `GET`s `https://lobechat.dev.localhost/api/health` (expect HTTP 200 with `{ "status": "ok" }`).
+  - `GET`s `https://lobechat.dev.localhost/api/models` and verifies the JSON includes the `lightrag` model identifier.
+- Invoke `check_lobechat_ui` from `main` just after the existing Open WebUI checks to keep the summary consolidated.
 
 #### A. Service Status Checks
 ```bash

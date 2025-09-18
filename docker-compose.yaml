@@ -110,7 +110,7 @@ services:
     ports:
       - 6379:6379
     command: >
-      redis-server  --appendonly yes --appendfsync everysec --save 900 1 --save 300 10 --save 60 10000 --maxmemory 1gb --maxmemory-policy allkeys-lru --tcp-keepalive 300 --timeout 300
+      redis-server --appendonly yes --appendfsync everysec --save 900 1 --save 300 10 --save 60 10000 --maxmemory 1gb --maxmemory-policy allkeys-lru --tcp-keepalive 300 --timeout 300 --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
     networks:
@@ -204,7 +204,7 @@ services:
       - proxy
       - graph
     healthcheck:
-      test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/3000' || exit 1
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000" ]
       interval: 30s
       timeout: 10s
       retries: 3

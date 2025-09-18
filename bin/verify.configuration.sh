@@ -14,6 +14,7 @@ if command -v tput >/dev/null 2>&1 && [[ -t 1 ]]; then
   COLOR_YELLOW="$(tput setaf 3)"
   COLOR_BLUE="$(tput setaf 4)"
   COLOR_RED="$(tput setaf 1)"
+  COLOR_GRAY="$(tput setaf 7)"
 else
   COLOR_RESET=""
   COLOR_BOLD=""
@@ -21,6 +22,7 @@ else
   COLOR_YELLOW=""
   COLOR_BLUE=""
   COLOR_RED=""
+  COLOR_GRAY=""
 fi
 
 log_info() { printf "%s%s%s\n" "${COLOR_BLUE}" "$1" "${COLOR_RESET}"; }
@@ -43,9 +45,11 @@ record_result() {
   RESULT_KEYS+=("$key")
   local tag="[$status] $key: $message"
   if [[ "$status" == "PASS" ]]; then
-    log_success "$tag"
+    # log_success "$tag"
+    printf "[%sOK%s]%s $key: $message%s\n" "${COLOR_GREEN}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
   else
-    log_error "$tag"
+    # log_error "$tag"
+    printf "[%sNO%s]%s $key: $message%s\n" "${COLOR_RED}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
   fi
 }
 
@@ -82,24 +86,24 @@ fetch_url() {
   local method="$1" url="$2" status_var="$3" body_var="$4"
   shift 4
   local header_file body_file resolve_arg
-  local status=0 body="" exit_code=0
+  local http_status=0 http_body="" exit_code=0
   header_file="$(mktemp)"
   body_file="$(mktemp)"
   resolve_arg="$(resolve_flag "$url")"
   if ! curl -skL --connect-timeout 5 --max-time 20 --retry 0 --resolve "$resolve_arg" -X "$method" "$url" "$@" -D "$header_file" -o "$body_file"; then
     exit_code=$?
   fi
-  status=$(awk 'toupper($1) ~ /^HTTP/ { code=$2 } END { if (code) print code }' "$header_file")
-  if [[ -z "$status" ]]; then
-    status=0
+  http_status=$(awk 'toupper($1) ~ /^HTTP/ { code=$2 } END { if (code) print code }' "$header_file")
+  if [[ -z "$http_status" ]]; then
+    http_status=0
   fi
-  body="$(cat "$body_file")"
+  http_body="$(cat "$body_file")"
   rm -f "$header_file" "$body_file"
   if (( exit_code != 0 )); then
-    body="curl exited with code ${exit_code}: ${body}"
+    http_body="curl exited with code ${exit_code}: ${http_body}"
   fi
-  printf -v "$status_var" '%s' "$status"
-  printf -v "$body_var" '%s' "$body"
+  printf -v "$status_var" '%s' "$http_status"
+  printf -v "$body_var" '%s' "$http_body"
   return 0
 }
 
@@ -267,7 +271,7 @@ check_memgraph_access() {
 
 check_lightrag_api() {
   log_section "LightRAG API"
-  local url="https://rag.dev.localhost/v1/models"
+  local url="https://rag.dev.localhost/documents"
   local status=0 body=""
   fetch_url "GET" "$url" status body -H "Accept: application/json"
   if [[ "$status" -eq 401 || "$status" -eq 403 ]]; then
@@ -276,12 +280,12 @@ check_lightrag_api() {
     record_result "lightrag:noauth" "FAIL" "Expected 401/403, got ${status}"
   fi
 
-  fetch_url "GET" "$url" status body -H "Accept: application/json" -H "Authorization: Bearer ${LIGHTRAG_API_KEY}"
+  fetch_url "GET" "$url" status body -H "Accept: application/json" -H "X-API-Key: ${LIGHTRAG_API_KEY}"
   if [[ "$status" -eq 200 ]]; then
-    if echo "$body" | jq -e '.data' >/dev/null 2>&1; then
-      record_result "lightrag:auth" "PASS" "Authorized request returned model list"
+    if echo "$body" | jq -e '.statuses' >/dev/null 2>&1; then
+      record_result "lightrag:auth" "PASS" "Authorized request returned document statuses"
     else
-      record_result "lightrag:auth" "FAIL" "Response missing data field: $(echo "$body" | head -c 120)"
+      record_result "lightrag:auth" "FAIL" "Response missing statuses field: $(echo "$body" | head -c 120)"
     fi
   else
     record_result "lightrag:auth" "FAIL" "Expected 200 with API key, got ${status}"
@@ -299,7 +303,7 @@ check_webui_flow() {
     record_result "webui:landing" "FAIL" "Status=${status}, Body snippet=$(echo "$body" | head -c 120)"
   fi
 
-  local signin_url="https://webui.dev.localhost/api/v1/auth/signin"
+  local signin_url="https://webui.dev.localhost/api/v1/auths/signin"
   local payload
   payload=$(jq -nc --arg email "${DEFAULT_ADMIN_EMAIL}" --arg password "${DEFAULT_ADMIN_PASSWORD}" '{email:$email,password:$password}')
   fetch_url "POST" "$signin_url" status body -H "Content-Type: application/json" -H "Accept: application/json" --data "$payload"
@@ -365,9 +369,11 @@ main() {
     local message="${RESULT_DETAILS[$key]}"
     local tag="[$status] $key: $message"
     if [[ "$status" == "PASS" ]]; then
-      log_success "$tag"
+      # log_success "$tag"
+      printf "[%sOK%s]%s $key: $message%s\n" "${COLOR_GREEN}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
     else
-      log_error "$tag"
+      # log_error "$tag"
+      printf "[%sNO%s]%s $key: $message%s\n" "${COLOR_RED}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
       exit_code=1
     fi
   done

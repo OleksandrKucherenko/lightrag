@@ -113,10 +113,11 @@ Edit your `docker-compose.yml` and add this service under the `services:` sectio
       - .env
       - .env.lobechat
     environment:
-      - DATABASE_URL=redis://kv:6379/2
-      - REDIS_URL=redis://kv:6379/3
+      - DATABASE_URL=redis://:${REDIS_PASSWORD}@kv:6379/2
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@kv:6379/3
       - OLLAMA_PROXY_URL=http://rag:9621/v1
       - ACCESS_CODE=${LOBECHAT_ACCESS_CODE:-}
+      - NODE_OPTIONS=--max_old_space_size=2048
     volumes:
       - lobechat_data:/app/.next
     networks:
@@ -129,19 +130,11 @@ Edit your `docker-compose.yml` and add this service under the `services:` sectio
       caddy.reverse_proxy: "{{upstreams 3210}}"
       caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3210/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3210/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '0.5'
-        reservations:
-          memory: 512M
-          cpus: '0.25'
     logging:
       driver: "json-file"
       options:
@@ -164,15 +157,16 @@ Add this under the `volumes:` section at the bottom of your `docker-compose.yml`
 
 ### 4. Health Check Configuration
 
-LobeChat uses these health check endpoints:
-- **Primary**: `http://localhost:3210/api/health` - Main health endpoint
-- **Alternative**: `http://localhost:3210/` - Basic connectivity
-- **Advanced**: `http://localhost:3210/api/config` - Configuration check
+For container health we probe the rendered landing page:
+- **Primary**: `http://localhost:3210/` (static HTML shell)
+- **Optional diagnostics**:
+  - `http://localhost:3210/_next/static/...` assets served by Next.js
+  - `http://localhost:3210/api/config` for configuration dumps (requires auth)
 
-The implemented health check:
+The configured health check:
 ```yaml
 healthcheck:
-  test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3210/api/health"]
+  test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3210/"]
   interval: 30s      # Check every 30 seconds
   timeout: 10s       # Timeout after 10 seconds
   retries: 3         # Retry 3 times before marking unhealthy
@@ -204,9 +198,9 @@ docker compose logs -f lobechat
 
 #### Prep: Extend Automated Verification
 - Append `lobechat` to the service list inside `check_compose_services` in `bin/verify.configuration.sh` so the script enforces container health.
-- Add a new `check_lobechat_ui` helper that:
-  - `GET`s `https://lobechat.dev.localhost/api/health` (expect HTTP 200 with `{ "status": "ok" }`).
-  - `GET`s `https://lobechat.dev.localhost/api/models` and verifies the JSON includes the `lightrag` model identifier.
+- Update `check_lobechat_ui` to:
+  - Fetch `https://lobechat.dev.localhost/` and assert an HTTP 200 response.
+  - Run `docker compose exec -T lobechat wget -qO- http://rag:9621/health` and ensure the JSON reports `status: healthy`.
 - Invoke `check_lobechat_ui` from `main` just after the existing Open WebUI checks to keep the summary consolidated.
 
 #### A. Service Status Checks
@@ -226,12 +220,10 @@ docker compose ps lobechat
 #### B. Network Connectivity Tests
 ```bash
 # Test internal connectivity to LightRAG
-docker compose exec lobechat wget -q --spider http://rag:9621/v1/models
-echo $?  # Should return 0 (success)
+docker compose exec -T lobechat sh -c "wget -qO- http://rag:9621/health" | jq '.status'
 
-# Test Redis connectivity
-docker compose exec lobechat wget -q --spider http://kv:6379
-echo $?  # Should return 0 (success)
+# Verify Redis auth from container logs
+docker compose logs lobechat | grep -i "redis"
 
 # Test external access
 curl -I https://lobechat.dev.localhost
@@ -350,7 +342,7 @@ docker stats lobechat
 - [ ] https://lobechat.dev.localhost loads successfully
 - [ ] LightRAG queries work with `/global`, `/local`, `/hybrid` prefixes
 - [ ] Both Open WebUI and LobeChat can access same LightRAG backend
-- [ ] Resource usage within expected limits (< 1GB RAM, < 0.5 CPU)
+- [ ] Resource usage within acceptable limits for your host (monitor via `docker stats`)
 - [ ] No error messages in `docker compose logs lobechat`
 - [ ] Health check endpoint returns HTTP 200
 

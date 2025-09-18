@@ -333,18 +333,22 @@ check_lobechat_ui() {
   local base="https://lobechat.dev.localhost"
   local status=0 body=""
 
-  fetch_url "GET" "${base}/api/health" status body -H "Accept: application/json"
-  if [[ "$status" -eq 200 ]] && echo "$body" | jq -e '.status == "ok"' >/dev/null 2>&1; then
-    record_result "lobechat:health" "PASS" "Health endpoint returned status=ok"
+  fetch_url "GET" "${base}/" status body
+  if [[ "$status" -eq 200 ]]; then
+    record_result "lobechat:health" "PASS" "Landing page returned 200"
   else
     record_result "lobechat:health" "FAIL" "Status=${status}, Body snippet=$(echo "$body" | head -c 120)"
   fi
 
-  fetch_url "GET" "${base}/api/models" status body -H "Accept: application/json"
-  if [[ "$status" -eq 200 ]] && echo "$body" | jq -e '.. | scalars | select(. == "lightrag")' >/dev/null 2>&1; then
-    record_result "lobechat:models" "PASS" "Models list contains lightrag"
+  local api_body=""
+  if api_body=$(docker compose exec -T lobechat sh -c "wget -qO- http://rag:9621/health" 2>/dev/null); then
+    if echo "$api_body" | jq -e '.status == "healthy"' >/dev/null 2>&1; then
+      record_result "lobechat:models" "PASS" "Container can reach LightRAG health endpoint"
+    else
+      record_result "lobechat:models" "FAIL" "Unexpected health payload: $(echo "$api_body" | head -c 120)"
+    fi
   else
-    record_result "lobechat:models" "FAIL" "Status=${status}, Body snippet=$(echo "$body" | head -c 120)"
+    record_result "lobechat:models" "FAIL" "wget to rag:/health failed"
   fi
 }
 

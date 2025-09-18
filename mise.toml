@@ -33,6 +33,7 @@ run = [
     "mkdir -p docker/logs/lightrag",
     # webui
     "mkdir -p docker/data/openwebui",
+    "mkdir -p docker/data/lobechat",
 ]
 
 [hooks]

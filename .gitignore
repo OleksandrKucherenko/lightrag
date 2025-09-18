@@ -26,3 +26,6 @@ docker/logs/lightrag/*
 
 # OpenWeb UI
 docker/data/openwebui/*
+
+# LobeChat UI
+docker/data/lobechat/*

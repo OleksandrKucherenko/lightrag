@@ -348,6 +348,56 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # LobeChat Frontend
+  lobechat:
+    # ref: https://github.com/lobehub/lobe-chat
+    image: lobehub/lobe-chat:latest
+    container_name: lobechat
+    restart: unless-stopped
+    depends_on:
+      - proxy
+      - rag
+      - kv
+    env_file:
+      - .env
+      - .env.lobechat
+    environment:
+      - DATABASE_URL=redis://kv:6379/2
+      - REDIS_URL=redis://kv:6379/3
+      - OLLAMA_PROXY_URL=http://rag:9621/v1
+      - ACCESS_CODE=${LOBECHAT_ACCESS_CODE:-}
+    volumes:
+      - lobechat_data:/app/.next
+    networks:
+      - frontend
+      - backend
+    ports:
+      - 3210:3210
+    labels:
+      # Caddy labels for automatic subdomain routing
+      caddy: "https://lobechat.dev.localhost"
+      caddy.reverse_proxy: "{{upstreams 3210}}"
+      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3210/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 networks:
   frontend:
     driver: bridge
@@ -438,3 +488,10 @@ volumes:
       type: none
       o: bind
       device: ./docker/data/openwebui
+  # LobeChat Data
+  lobechat_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./docker/data/lobechat

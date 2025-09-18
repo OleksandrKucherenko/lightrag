@@ -146,7 +146,7 @@ assert_env_vars() {
 # -----------------------------------------------------------------------------
 check_compose_services() {
   log_section "Docker Compose"
-  local services=(proxy monitor kv graph graph-ui vectors rag webui)
+  local services=(proxy monitor kv graph graph-ui vectors rag webui lobechat)
   local all_ok=1
   for svc in "${services[@]}"; do
     local cid
@@ -328,6 +328,26 @@ check_webui_flow() {
   fi
 }
 
+check_lobechat_ui() {
+  log_section "LobeChat"
+  local base="https://lobechat.dev.localhost"
+  local status=0 body=""
+
+  fetch_url "GET" "${base}/api/health" status body -H "Accept: application/json"
+  if [[ "$status" -eq 200 ]] && echo "$body" | jq -e '.status == "ok"' >/dev/null 2>&1; then
+    record_result "lobechat:health" "PASS" "Health endpoint returned status=ok"
+  else
+    record_result "lobechat:health" "FAIL" "Status=${status}, Body snippet=$(echo "$body" | head -c 120)"
+  fi
+
+  fetch_url "GET" "${base}/api/models" status body -H "Accept: application/json"
+  if [[ "$status" -eq 200 ]] && echo "$body" | jq -e '.. | scalars | select(. == "lightrag")' >/dev/null 2>&1; then
+    record_result "lobechat:models" "PASS" "Models list contains lightrag"
+  else
+    record_result "lobechat:models" "FAIL" "Status=${status}, Body snippet=$(echo "$body" | head -c 120)"
+  fi
+}
+
 # -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
@@ -361,6 +381,7 @@ main() {
   check_memgraph_access
   check_lightrag_api
   check_webui_flow
+  check_lobechat_ui
 
   log_section "Summary"
   local exit_code=0

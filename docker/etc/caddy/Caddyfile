@@ -11,19 +11,14 @@
     auto_https prefer_wildcard
 }
 
-# Wildcard certificate for dev.localhost
-*.dev.localhost {
-    tls /certificates/dev.localhost.pem /certificates/dev.localhost-key.pem
-}
-
 # Fallback for any unconfigured domains
 :80, :443 {
     # Health check endpoint
     respond /health "OK" 200
 
-    # Default response
-    respond "LightRAG Local Development Stack" 200
-
     # Add debug info for local development
     respond /debug "Environment: local.dev development" 200
+
+    # Default response
+    respond "LightRAG Local Development Stack" 200
 }

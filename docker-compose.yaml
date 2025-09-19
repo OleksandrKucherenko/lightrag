@@ -39,6 +39,15 @@ x-deploy-large: &deploy-large
       memory: 4G
       cpus: '2.0'
 
+x-ulimits-unlimited: &ulimits-unlimited
+  ulimits:
+    memlock:
+      soft: -1
+      hard: -1
+    nofile:
+      soft: 65536
+      hard: 65536
+
 x-volume-bind: &volume-bind
   driver: local
   driver_opts: &volume-bind-opts
@@ -65,7 +74,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - caddy_data:/data
       - caddy_config:/config
-      - ./docker/ssl:/certificates:ro
     networks:
       - frontend
       - backend
@@ -74,7 +82,6 @@ services:
       caddy.respond: "/health \"OK\" 200"
       caddy.respond_1: "/debug \"Environment: local.dev development\" 200"
       caddy.respond_2: "/* \"LightRAG Local Development Stack\" 200"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
     healthcheck:
       <<: *default-healthcheck
       test: [ "CMD", "/bin/caddy", "validate", "--config", "/config/caddy/Caddyfile" ]
@@ -106,7 +113,6 @@ services:
       caddy.reverse_proxy: "{{upstreams 3000}}"
       caddy.basic_auth: "*"
       caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
     healthcheck:
       <<: *default-healthcheck
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000" ]
@@ -130,8 +136,7 @@ services:
       - .env.databases
     ports:
       - 6379:6379
-    command: >
-      redis-server --appendonly yes --appendfsync everysec --save 900 1 --save 300 10 --save 60 10000 --maxmemory 1gb --maxmemory-policy allkeys-lru --tcp-keepalive 300 --timeout 300 --requirepass ${REDIS_PASSWORD}
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
     networks:
@@ -153,10 +158,7 @@ services:
       - .env.databases
     # No authentication for internal services
     command: >
-      --log-level=WARNING
-      --memory-limit=4096
-      --data-recovery-on-startup=true
-      --telemetry-enabled=false
+      --log-level=WARNING --memory-limit=4096 --data-recovery-on-startup=true --telemetry-enabled=false
     volumes:
       - memgraph_data:/var/lib/memgraph
       - memgraph_log:/var/log/memgraph
@@ -166,15 +168,9 @@ services:
       - 7687:7687
     healthcheck:
       <<: *default-healthcheck
-      start_period: 45s
-      test: [ "CMD-SHELL", "echo 'RETURN 0;' | mgconsole --host 127.0.0.1 --port 7687 || exit 1" ]
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
+      test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/7687' || exit 1
+      # test: [ "CMD-SHELL", "echo 'RETURN 0;' | mgconsole --host 127.00.0.1 --port 7687 || exit 1" ]
+    ulimits: *ulimits-unlimited
     deploy: *deploy-large
     logging: *default-logging
 
@@ -197,15 +193,11 @@ services:
       # Caddy labels for automatic subdomain routing
       caddy: "https://graph.dev.localhost"
       caddy.reverse_proxy: "{{upstreams 3000}}"
-      # caddy.basic_auth: "*"
-      # caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
     depends_on:
       - proxy
       - graph
     healthcheck:
       <<: *default-healthcheck
-      start_period: 60s
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000" ]
     deploy: *deploy-small
     logging: *default-logging
@@ -233,12 +225,8 @@ services:
       # Caddy labels for automatic subdomain routing
       caddy: "https://vector.dev.localhost"
       caddy.reverse_proxy: "{{upstreams 6333}}"
-      # caddy.basic_auth: "*"
-      # caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
     healthcheck:
       <<: *default-healthcheck
-      start_period: 60s
       test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1
     deploy: *deploy-medium
     logging: *default-logging
@@ -273,10 +261,8 @@ services:
       # Caddy labels for automatic subdomain routing
       caddy: "https://rag.dev.localhost"
       caddy.reverse_proxy: "{{upstreams 9621}}"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
     healthcheck:
       <<: *default-healthcheck
-      start_period: 60s
       test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/9621' || exit 1
     deploy: *deploy-medium
     logging: *default-logging
@@ -308,10 +294,8 @@ services:
       # Caddy labels for automatic subdomain routing
       caddy: "https://webui.dev.localhost"
       caddy.reverse_proxy: "{{upstreams 8080}}"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
     healthcheck:
       <<: *default-healthcheck
-      start_period: 60s
       test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
     deploy: *deploy-medium
     logging: *default-logging
@@ -346,10 +330,8 @@ services:
       # Caddy labels for automatic subdomain routing
       caddy: "https://lobechat.dev.localhost"
       caddy.reverse_proxy: "{{upstreams 3210}}"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
     healthcheck:
       <<: *default-healthcheck
-      start_period: 60s
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3210/" ]
     deploy: *deploy-small
     logging: *default-logging

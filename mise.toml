@@ -10,7 +10,7 @@ MISE_SOPS_AGE_KEY_FILE = ".secrets/mise-age.txt"
 SOPS_AGE_KEY_FILE = "{{env.MISE_SOPS_AGE_KEY_FILE}}"
 
 [[env]]
-_.file = [".env.secrets.json"]
+_.file = [".env.secrets.json", ".env"]
 
 [tasks.setup]
 description = "Pre-configure project folders"
@@ -24,6 +24,7 @@ run = [
     "mkdir -p docker/data/redis",
     # graph
     "mkdir -p docker/data/memgraph",
+    "mkdir -p docker/logs/memgraph",
     # vectors
     "mkdir -p docker/data/qdrant/storage",
     "mkdir -p docker/data/qdrant/snapshots",

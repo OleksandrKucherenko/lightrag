@@ -1,7 +1,7 @@
-# Add LobeChat to Existing LightRAG + Open WebUI Stack
+# Add LobeChat to Existing LightRAG Stack
 
 ## Prerequisites
-- Existing LightRAG + Open WebUI stack running
+- Existing LightRAG stack running
 - Docker Compose v2.0+
 - 2GB+ available RAM
 - Port 3210 available
@@ -18,12 +18,10 @@ lightrag-project/
 ├── .env.caddy                  # Existing
 ├── .env.databases              # Existing  
 ├── .env.lightrag               # Existing
-├── .env.openwebui              # Existing
-├── .env.lobechat              # ← NEW FILE
+├── .env.lobechat               # ← NEW FILE
 ├── .env.monitoring             # Existing
 └── docker/
     ├── data/
-    │   ├── openwebui/          # Existing
     │   ├── lightrag/           # Existing
     │   └── lobechat/           # ← NEW DIRECTORY
     └── ssl/                    # Existing
@@ -89,7 +87,6 @@ ls -la ./docker/data/ | grep lobechat
       "mkdir -p docker/data/caddy",
       "mkdir -p docker/etc/caddy",
       # ...existing entries...
-      "mkdir -p docker/data/openwebui",
       "mkdir -p docker/data/lobechat",
   ]
   ```
@@ -108,7 +105,7 @@ ls -la ./docker/data/ | grep lobechat
 Edit your `docker-compose.yml` and add this service under the `services:` section:
 
 ```yaml
-  # Add this AFTER your existing webui service
+  # Add this service to your docker-compose.yml
   lobechat:
     image: lobehub/lobe-chat:latest
     container_name: lobechat
@@ -209,7 +206,7 @@ docker compose logs -f lobechat
 - Update `check_lobechat_ui` to:
   - Fetch `https://lobechat.dev.localhost/` and assert an HTTP 200 response.
   - Run `docker compose exec -T lobechat wget -qO- http://rag:9621/health` and ensure the JSON reports `status: healthy`.
-- Invoke `check_lobechat_ui` from `main` just after the existing Open WebUI checks to keep the summary consolidated.
+- Invoke `check_lobechat_ui` from `main` to keep the summary consolidated.
 
 #### A. Service Status Checks
 ```bash
@@ -278,7 +275,6 @@ docker compose logs lobechat | grep -E "(ERROR|Error|error)"
 | Service        | URL                            | Purpose            | Test Command                             |
 | -------------- | ------------------------------ | ------------------ | ---------------------------------------- |
 | **LobeChat**   | https://lobechat.dev.localhost | New TypeScript UI  | `curl -I https://lobechat.dev.localhost` |
-| **Open WebUI** | https://webui.dev.localhost    | Existing Python UI | `curl -I https://webui.dev.localhost`    |
 | **LightRAG**   | https://rag.dev.localhost      | Shared RAG Backend | `curl -I https://rag.dev.localhost`      |
 | **Monitor**    | https://monitor.dev.localhost  | Docker Management  | `curl -I https://monitor.dev.localhost`  |
 
@@ -352,7 +348,7 @@ docker stats lobechat
 - [ ] `docker compose ps lobechat` shows "Up (healthy)"
 - [ ] https://lobechat.dev.localhost loads successfully
 - [ ] LightRAG queries work with `/global`, `/local`, `/hybrid` prefixes
-- [ ] Both Open WebUI and LobeChat can access same LightRAG backend
+- [ ] LobeChat can access LightRAG backend
 - [ ] Resource usage within acceptable limits for your host (monitor via `docker stats`)
 - [ ] No error messages in `docker compose logs lobechat`
 - [ ] Health check endpoint returns HTTP 200

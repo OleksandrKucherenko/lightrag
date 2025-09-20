@@ -24,8 +24,5 @@ docker/logs/lightrag/*
 # Secrets
 .secrets/
 
-# OpenWeb UI
-docker/data/openwebui/*
-
 # LobeChat UI
 docker/data/lobechat/*

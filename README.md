@@ -17,7 +17,6 @@
   - [Services](#services)
     - [Caddy](#caddy)
     - [Lazydocker Web UI](#lazydocker-web-ui)
-    - [Open WebUI](#open-webui)
 
 
 ## Developer Environment setup
@@ -291,16 +290,3 @@ docker run --rm caddy:2-alpine caddy hash-password --plaintext admin
 # Test Url
 curl -v http://monitor.dev.localhost --user admin:admin
  ```
-
-### Open WebUI
-
-```bash
-# verify connections
-docker compose exec webui python -c "import requests; print('RAG API Status:', requests.get('http://rag:9621/health').status_code)" 2>/dev/null || echo "Testing internal connectivity..."
-
-# Verify Caddy redirect
-curl -s -o /dev/null -w "%{http_code}" http://webui.dev.localhost || echo "DNS or Caddy routing issue"
-
-# Verify webui
-curl -k -s -o /dev/null -w "%{http_code}" https://webui.dev.localhost || echo "HTTPS issue"
-```

@@ -146,7 +146,7 @@ assert_env_vars() {
 # -----------------------------------------------------------------------------
 check_compose_services() {
   log_section "Docker Compose"
-  local services=(proxy monitor kv graph graph-ui vectors rag webui lobechat)
+  local services=(proxy monitor kv graph graph-ui vectors rag lobechat)
   local all_ok=1
   for svc in "${services[@]}"; do
     local cid
@@ -303,41 +303,6 @@ check_lightrag_ollama() {
   fi
 }
 
-check_webui_flow() {
-  log_section "Open WebUI"
-  local url="https://webui.dev.localhost/"
-  local status=0 body=""
-  fetch_url "GET" "$url" status body
-  if [[ "$status" -eq 200 && "$body" == *"<html"* ]]; then
-    record_result "webui:landing" "PASS" "Received HTML shell"
-  else
-    record_result "webui:landing" "FAIL" "Status=${status}, Body snippet=$(echo "$body" | head -c 120)"
-  fi
-
-  local signin_url="https://webui.dev.localhost/api/v1/auths/signin"
-  local payload
-  payload=$(jq -nc --arg email "${DEFAULT_ADMIN_EMAIL}" --arg password "${DEFAULT_ADMIN_PASSWORD}" '{email:$email,password:$password}')
-  fetch_url "POST" "$signin_url" status body -H "Content-Type: application/json" -H "Accept: application/json" --data "$payload"
-  if [[ "$status" -eq 200 ]]; then
-    local token role
-    token=$(echo "$body" | jq -r '.token // empty' 2>/dev/null || true)
-    role=$(echo "$body" | jq -r '.role // empty' 2>/dev/null || true)
-    if [[ -n "$token" ]]; then
-      record_result "webui:signin" "PASS" "Signin succeeded (role=${role:-unknown})"
-      local status2=0 body2=""
-      fetch_url "GET" "https://webui.dev.localhost/api/v1/users/active" status2 body2 -H "Accept: application/json" -H "Authorization: Bearer ${token}"
-      if [[ "$status2" -eq 200 ]]; then
-        record_result "webui:authz" "PASS" "Authenticated API call succeeded"
-      else
-        record_result "webui:authz" "FAIL" "Expected 200 from authenticated call, got ${status2}"
-      fi
-    else
-      record_result "webui:signin" "FAIL" "Signin response missing token"
-    fi
-  else
-    record_result "webui:signin" "FAIL" "Expected 200 from signin, got ${status}"
-  fi
-}
 
 check_lobechat_ui() {
   log_section "LobeChat"
@@ -396,7 +361,6 @@ main() {
   check_memgraph_access
   check_lightrag_api
   check_lightrag_ollama
-  check_webui_flow
   check_lobechat_ui
 
   log_section "Summary"

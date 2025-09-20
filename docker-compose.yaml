@@ -40,13 +40,12 @@ x-deploy-large: &deploy-large
       cpus: '2.0'
 
 x-ulimits-unlimited: &ulimits-unlimited
-  ulimits:
-    memlock:
-      soft: -1
-      hard: -1
-    nofile:
-      soft: 65536
-      hard: 65536
+  memlock:
+    soft: -1
+    hard: -1
+  nofile:
+    soft: 65536
+    hard: 65536
 
 x-volume-bind: &volume-bind
   driver: local
@@ -267,38 +266,6 @@ services:
     deploy: *deploy-medium
     logging: *default-logging
 
-  # Open WebUI Frontend
-  webui:
-    # ref: https://github.com/open-webui/open-webui
-    image: ghcr.io/open-webui/open-webui:main
-    container_name: webui
-    restart: unless-stopped
-    depends_on:
-      - proxy
-      - rag
-      - kv
-      - vectors
-    env_file:
-      - .env
-      - .env.openwebui
-    environment:
-      - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL:-admin@lightrag.local}
-    volumes:
-      - openwebui_data:/app/backend/data
-    networks:
-      - frontend
-      - backend
-    ports:
-      - 3000:8080
-    labels:
-      # Caddy labels for automatic subdomain routing
-      caddy: "https://webui.dev.localhost"
-      caddy.reverse_proxy: "{{upstreams 8080}}"
-    healthcheck:
-      <<: *default-healthcheck
-      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
-    deploy: *deploy-medium
-    logging: *default-logging
 
   # LobeChat Frontend
   lobechat:
@@ -409,12 +376,6 @@ volumes:
     driver_opts:
       <<: *volume-bind-opts
       device: ./docker/logs/lightrag
-  # OpenWebUI Data
-  openwebui_data:
-    <<: *volume-bind
-    driver_opts:
-      <<: *volume-bind-opts
-      device: ./docker/data/openwebui
   # LobeChat Data
   lobechat_data:
     <<: *volume-bind

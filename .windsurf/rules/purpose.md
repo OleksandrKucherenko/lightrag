@@ -29,6 +29,7 @@ Create minimalistic configuration of LightRAG with LLM Chat integration. That sh
   - Mkcert - used for creating a wildcard ssl certificates (dir: docker/ssl)
 - Caddy reverse proxy - used for publishing each service in own subdomain
   - hostctl - used for managing sub-domains publishing
+  - Docker confiurations via labels - https://github.com/lucaslorentz/caddy-docker-proxy
 
 ## Alternatives
 

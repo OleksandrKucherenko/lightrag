@@ -73,11 +73,14 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - caddy_data:/data
       - caddy_config:/config
+      # Mount SSL certificates for wildcard domain support
+      - ./docker/ssl:/ssl:ro
     networks:
       - frontend
       - backend
     labels:
       caddy: "https://${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.respond: "/health \"OK\" 200"
       caddy.respond_1: "/debug \"Environment: local.dev development\" 200"
       caddy.respond_2: "/* \"LightRAG Local Development Stack\" 200"
@@ -109,6 +112,7 @@ services:
     labels:
       # Caddy labels for Isaiah web interface
       caddy: "https://monitor.${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.reverse_proxy: "{{upstreams 3000}}"
       caddy.basic_auth: "*"
       caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
@@ -127,6 +131,7 @@ services:
     labels:
       # Caddy labels for Redis web interface
       caddy: "https://kv.${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.reverse_proxy: "{{upstreams 6379}}"
     depends_on:
       - proxy
@@ -191,6 +196,7 @@ services:
     labels:
       # Caddy labels for automatic subdomain routing
       caddy: "https://graph.${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.reverse_proxy: "{{upstreams 3000}}"
     depends_on:
       - proxy
@@ -223,6 +229,7 @@ services:
     labels:
       # Caddy labels for automatic subdomain routing
       caddy: "https://vector.${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.reverse_proxy: "{{upstreams 6333}}"
     healthcheck:
       <<: *default-healthcheck
@@ -259,6 +266,7 @@ services:
     labels:
       # Caddy labels for automatic subdomain routing
       caddy: "https://rag.${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.reverse_proxy: "{{upstreams 9621}}"
     healthcheck:
       <<: *default-healthcheck
@@ -296,6 +304,7 @@ services:
     labels:
       # Caddy labels for automatic subdomain routing
       caddy: "https://lobechat.${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.reverse_proxy: "{{upstreams 3210}}"
     healthcheck:
       <<: *default-healthcheck

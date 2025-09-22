@@ -1,14 +1,16 @@
-# Global configuration for local development
+# Global configuration for local development with custom SSL certificates
 {
-    email admin@local.dev
-
-    # Use internal CA for local development
-    acme_ca internal
+    # Use local SSL certificates instead of ACME
+    tls /ssl/dev.localhost.pem /ssl/dev.localhost-key.pem
 
     # Docker provider handled automatically by lucaslorentz/caddy-docker-proxy image
 
-    # Local development settings - enable internal CA for self-signed certs
-    auto_https prefer_wildcard
+    # Enable HTTP/3 and other modern features
+    servers {
+        protocol {
+            network http/3
+        }
+    }
 }
 
 # Fallback for any unconfigured domains

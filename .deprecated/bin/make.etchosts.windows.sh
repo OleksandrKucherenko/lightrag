@@ -93,7 +93,7 @@ extract_service_domains() {
         # Get the full compose config and extract caddy labels
         local compose_config
         if compose_config=$(docker compose config 2>/dev/null); then
-            # Extract services with caddy labels pointing to dev.localhost
+            # Extract services with caddy labels pointing to ${PUBLISH_DOMAIN:-dev.localhost}
             echo "$compose_config" | awk '
             /^  [a-zA-Z][a-zA-Z0-9_-]*:/ { 
                 service = $1; 
@@ -103,7 +103,7 @@ extract_service_domains() {
             /^[a-zA-Z]/ && !/^  / { 
                 in_service = 0; 
             }
-            in_service && /caddy:.*https:\/\/.*\.dev\.localhost/ { 
+            in_service && /caddy:.*https:\/\/.*\./ { 
                 match($0, /https:\/\/([^"[:space:]]+)/, arr);
                 if (arr[1]) {
                     print service ":" arr[1];
@@ -112,7 +112,7 @@ extract_service_domains() {
             
             # Check if we found any services
             local found_services
-            found_services=$(echo "$compose_config" | grep -c 'caddy:.*https://.*\.dev\.localhost' || echo "0")
+            found_services=$(echo "$compose_config" | grep -c 'caddy:.*https://' || echo "0")
             if [[ "$found_services" -gt 0 ]]; then
                 return 0
             fi
@@ -192,31 +192,31 @@ validate_service_domains() {
     for entry in "${service_domains[@]}"; do
         IFS=':' read -r service_name domain <<< "$entry"
         
-        # Expected pattern: service.dev.localhost
-        expected_domain="${service_name}.dev.localhost"
+        # Expected pattern: service.${PUBLISH_DOMAIN:-dev.localhost}
+        expected_domain="${service_name}.${PUBLISH_DOMAIN:-dev.localhost}"
         
         if [[ "$domain" != "$expected_domain" ]]; then
             # Check for known acceptable variations
             case "$service_name" in
                 "graph-ui")
-                    if [[ "$domain" == "graph.dev.localhost" ]]; then
+                    if [[ "$domain" == "graph.${PUBLISH_DOMAIN:-dev.localhost}" ]]; then
                         log_info "  ✓ Acceptable variation: '$service_name' → '$domain' (UI service using base name)"
                     else
-                        inconsistencies+=("$service_name: expected 'graph.dev.localhost' or '$expected_domain', got '$domain'")
+                        inconsistencies+=("$service_name: expected 'graph.${PUBLISH_DOMAIN:-dev.localhost}' or '$expected_domain', got '$domain'")
                     fi
                     ;;
                 "vectors")
-                    if [[ "$domain" == "vector.dev.localhost" ]]; then
+                    if [[ "$domain" == "vector.${PUBLISH_DOMAIN:-dev.localhost}" ]]; then
                         log_info "  ✓ Acceptable variation: '$service_name' → '$domain' (singular form)"
                     else
-                        inconsistencies+=("$service_name: expected 'vector.dev.localhost' or '$expected_domain', got '$domain'")
+                        inconsistencies+=("$service_name: expected 'vector.${PUBLISH_DOMAIN:-dev.localhost}' or '$expected_domain', got '$domain'")
                     fi
                     ;;
                 *)
                     # Check if it's a UI service pattern (service-ui → service.domain)
                     if [[ "$service_name" =~ ^(.+)-ui$ ]]; then
                         local base_service="${BASH_REMATCH[1]}"
-                        local expected_ui_domain="${base_service}.dev.localhost"
+                        local expected_ui_domain="${base_service}.${PUBLISH_DOMAIN:-dev.localhost}"
                         if [[ "$domain" == "$expected_ui_domain" ]]; then
                             log_info "  ✓ UI service pattern: '$service_name' → '$domain' (using base service name)"
                         else
@@ -281,7 +281,7 @@ check_service_conflicts() {
     # Check for potential conflicts
     local potential_conflicts=()
     for service in "${all_services[@]}"; do
-        local potential_domain="${service}.dev.localhost"
+        local potential_domain="${service}.${PUBLISH_DOMAIN:-dev.localhost}"
         
         # Check if this service has a Caddy label
         local has_caddy_label=false
@@ -369,7 +369,7 @@ generate_etchosts_content() {
 EOF
 
     echo "# Main development domain"
-    printf "%-15s %s\n" "$windows_ip" "dev.localhost"
+    printf "%-15s %s\n" "$windows_ip" "${PUBLISH_DOMAIN:-dev.localhost}"
 
     echo ""
     echo "# Services from docker-compose.yaml"

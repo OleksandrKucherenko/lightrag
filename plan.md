@@ -95,7 +95,7 @@ ls -la ./docker/data/ | grep lobechat
 #### E. DNS Profile Update
 - Add the new subdomain to `.etchosts` (or your hostctl profile) so Caddy can be reached locally:
   ```text
-  127.0.0.1 lobechat.dev.localhost
+  127.0.0.1 lobechat.${PUBLISH_DOMAIN}
   ```
 - Re-run `hostctl replace lightrag --from .etchosts && hostctl enable lightrag` if you rely on the automation.
 
@@ -131,9 +131,9 @@ Edit your `docker-compose.yml` and add this service under the `services:` sectio
     ports:
       - 3210:3210
     labels:
-      caddy: "https://lobechat.dev.localhost"
+      caddy: "https://lobechat.${PUBLISH_DOMAIN}"
       caddy.reverse_proxy: "{{upstreams 3210}}"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
+      caddy.tls: "/certificates/${PUBLISH_DOMAIN}.pem /certificates/${PUBLISH_DOMAIN}-key.pem"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3210/"]
       interval: 30s
@@ -204,7 +204,7 @@ docker compose logs -f lobechat
 #### Prep: Extend Automated Verification
 - Append `lobechat` to the service list inside `check_compose_services` in `bin/verify.configuration.sh` so the script enforces container health.
 - Update `check_lobechat_ui` to:
-  - Fetch `https://lobechat.dev.localhost/` and assert an HTTP 200 response.
+  - Fetch `https://lobechat.${PUBLISH_DOMAIN}/` and assert an HTTP 200 response.
   - Run `docker compose exec -T lobechat wget -qO- http://rag:9621/health` and ensure the JSON reports `status: healthy`.
 - Invoke `check_lobechat_ui` from `main` to keep the summary consolidated.
 
@@ -228,30 +228,30 @@ docker compose ps lobechat
 docker compose exec -T lobechat sh -c "wget -qO- http://rag:9621/health" | jq '.status'
 
 # Fetch simulated Ollama models from LightRAG
-curl -sk https://rag.dev.localhost/api/tags | jq '.models[].name'
+curl -sk https://rag.${PUBLISH_DOMAIN}/api/tags | jq '.models[].name'
 
 # Verify Redis auth from container logs
 docker compose logs lobechat | grep -i "redis"
 
 # Test external access
-curl -I https://lobechat.dev.localhost
+curl -I https://lobechat.${PUBLISH_DOMAIN}
 # Expected: HTTP/2 200 OK
 ```
 
 #### C. Application Functionality Tests
 ```bash
 # 1. Access the web interface
-open https://lobechat.dev.localhost
+open https://lobechat.${PUBLISH_DOMAIN}
 # OR
-curl -s https://lobechat.dev.localhost | grep -q "LobeChat"
+curl -s https://lobechat.${PUBLISH_DOMAIN} | grep -q "LobeChat"
 echo $?  # Should return 0
 
 # 2. Test API endpoints
-curl -s https://lobechat.dev.localhost/api/health
+curl -s https://lobechat.${PUBLISH_DOMAIN}/api/health
 # Expected: {"status":"ok","timestamp":"..."}
 
 # 3. Test LightRAG integration
-curl -s https://lobechat.dev.localhost/api/models
+curl -s https://lobechat.${PUBLISH_DOMAIN}/api/models
 # Should list "lightrag" model
 ```
 
@@ -274,14 +274,14 @@ docker compose logs lobechat | grep -E "(ERROR|Error|error)"
 
 | Service        | URL                            | Purpose            | Test Command                             |
 | -------------- | ------------------------------ | ------------------ | ---------------------------------------- |
-| **LobeChat**   | https://lobechat.dev.localhost | New TypeScript UI  | `curl -I https://lobechat.dev.localhost` |
-| **LightRAG**   | https://rag.dev.localhost      | Shared RAG Backend | `curl -I https://rag.dev.localhost`      |
-| **Monitor**    | https://monitor.dev.localhost  | Docker Management  | `curl -I https://monitor.dev.localhost`  |
+| **LobeChat**   | https://lobechat.${PUBLISH_DOMAIN} | New TypeScript UI  | `curl -I https://lobechat.${PUBLISH_DOMAIN}` |
+| **LightRAG**   | https://rag.${PUBLISH_DOMAIN}      | Shared RAG Backend | `curl -I https://rag.${PUBLISH_DOMAIN}`      |
+| **Monitor**    | https://monitor.${PUBLISH_DOMAIN}  | Docker Management  | `curl -I https://monitor.${PUBLISH_DOMAIN}`  |
 
 ### 8. Functional Testing
 
 #### A. LightRAG Query Modes in LobeChat
-1. Access https://lobechat.dev.localhost
+1. Access https://lobechat.${PUBLISH_DOMAIN}
 2. Test these queries:
 ```
 What is this about?           # /hybrid (default)
@@ -306,12 +306,12 @@ docker compose logs lobechat
 # Look for port conflicts, missing environment variables
 ```
 
-**Issue**: Can't access https://lobechat.dev.localhost
+**Issue**: Can't access https://lobechat.${PUBLISH_DOMAIN}
 ```bash
 # Check Caddy proxy
 docker compose logs proxy | grep lobechat
 # Verify SSL certificates exist
-ls -la ./docker/ssl/dev.localhost*
+ls -la ./docker/ssl/${PUBLISH_DOMAIN}*
 ```
 
 **Issue**: LightRAG connection fails
@@ -346,7 +346,7 @@ docker stats lobechat
 - [ ] `.env.lobechat` created with correct Redis URLs
 - [ ] `./docker/data/lobechat` directory exists with correct permissions
 - [ ] `docker compose ps lobechat` shows "Up (healthy)"
-- [ ] https://lobechat.dev.localhost loads successfully
+- [ ] https://lobechat.${PUBLISH_DOMAIN} loads successfully
 - [ ] LightRAG queries work with `/global`, `/local`, `/hybrid` prefixes
 - [ ] LobeChat can access LightRAG backend
 - [ ] Resource usage within acceptable limits for your host (monitor via `docker stats`)

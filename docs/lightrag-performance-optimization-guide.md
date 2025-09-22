@@ -39,7 +39,7 @@ PORT=9621
 WEBUI_TITLE=LightRAG Production
 WEBUI_DESCRIPTION=Production RAG System with Knowledge Graphs
 
-CORS_ORIGINS=http://localhost:3000,https://dev.localhost
+CORS_ORIGINS=http://localhost:3000,https://${PUBLISH_DOMAIN}
 
 # OPTIMIZED: Reduced workers to prevent resource contention
 WORKERS=6

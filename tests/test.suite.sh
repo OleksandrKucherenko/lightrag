@@ -320,18 +320,18 @@ test_lobechat_ssl_tls() {
     test_start "$test_name"
 
     given "SSL certificates are configured and LobeChat is accessible via HTTPS"
-    when "testing HTTPS access to lobechat.dev.localhost"
+    when "testing HTTPS access to lobechat.${PUBLISH_DOMAIN:-dev.localhost}"
     then_step "SSL/TLS connection should be established successfully"
 
     # Test HTTPS connectivity (skip certificate verification for dev environment)
     local https_status
-    if https_status=$(curl -s -k -o /dev/null -w "%{http_code}" https://lobechat.dev.localhost/ 2>/dev/null); then
+    if https_status=$(curl -s -k -o /dev/null -w "%{http_code}" https://lobechat.${PUBLISH_DOMAIN:-dev.localhost}/ 2>/dev/null); then
         if [[ "$https_status" == "200" ]]; then
             and_then "HTTPS connection established successfully"
             
             # Test SSL certificate validity (basic check)
             local cert_info
-            if cert_info=$(echo | openssl s_client -connect lobechat.dev.localhost:443 -servername lobechat.dev.localhost 2>/dev/null | openssl x509 -noout -subject 2>/dev/null); then
+            if cert_info=$(echo | openssl s_client -connect lobechat.${PUBLISH_DOMAIN:-dev.localhost}:443 -servername lobechat.${PUBLISH_DOMAIN:-dev.localhost} 2>/dev/null | openssl x509 -noout -subject 2>/dev/null); then
                 and_then "SSL certificate is readable: $cert_info"
             fi
             
@@ -340,7 +340,7 @@ test_lobechat_ssl_tls() {
             test_fail "$test_name" "HTTPS returned status $https_status"
         fi
     else
-        test_fail "$test_name" "Cannot establish HTTPS connection to lobechat.dev.localhost"
+        test_fail "$test_name" "Cannot establish HTTPS connection to lobechat.${PUBLISH_DOMAIN:-dev.localhost}"
     fi
 }
 
@@ -359,7 +359,7 @@ test_lobechat_performance() {
     ui_start_time=$(date +%s.%N)
     
     local ui_status
-    if ui_status=$(curl -s -k -o /dev/null -w "%{http_code}" https://lobechat.dev.localhost/ 2>/dev/null); then
+    if ui_status=$(curl -s -k -o /dev/null -w "%{http_code}" https://lobechat.${PUBLISH_DOMAIN:-dev.localhost}/ 2>/dev/null); then
         ui_end_time=$(date +%s.%N)
         ui_response_time=$(echo "$ui_end_time - $ui_start_time" | bc -l)
         
@@ -375,7 +375,7 @@ test_lobechat_performance() {
                 api_start_time=$(date +%s.%N)
                 
                 local api_status
-                if api_status=$(curl -s -k -o /dev/null -w "%{http_code}" https://lobechat.dev.localhost/api/health 2>/dev/null); then
+                if api_status=$(curl -s -k -o /dev/null -w "%{http_code}" https://lobechat.${PUBLISH_DOMAIN:-dev.localhost}/api/health 2>/dev/null); then
                     api_end_time=$(date +%s.%N)
                     api_response_time=$(echo "$api_end_time - $api_start_time" | bc -l)
                     
@@ -411,26 +411,26 @@ test_lightrag_query_modes() {
 
     # Test LightRAG health first
     local rag_health
-    if rag_health=$(curl -s -k https://rag.dev.localhost/health 2>/dev/null); then
+    if rag_health=$(curl -s -k https://rag.${PUBLISH_DOMAIN:-dev.localhost}/health 2>/dev/null); then
         and_then "LightRAG service is accessible"
         
         # Test global query mode
         local global_response
-        if global_response=$(curl -s -k -X POST https://rag.dev.localhost/v1/chat/completions \
+        if global_response=$(curl -s -k -X POST https://rag.${PUBLISH_DOMAIN:-dev.localhost}/v1/chat/completions \
             -H "Content-Type: application/json" \
             -d '{"model":"lightrag","messages":[{"role":"user","content":"/global What are the key insights?"}],"max_tokens":100}' 2>/dev/null); then
             and_then "Global query mode (/global) endpoint accessible"
             
             # Test local query mode
             local local_response
-            if local_response=$(curl -s -k -X POST https://rag.dev.localhost/v1/chat/completions \
+            if local_response=$(curl -s -k -X POST https://rag.${PUBLISH_DOMAIN:-dev.localhost}/v1/chat/completions \
                 -H "Content-Type: application/json" \
                 -d '{"model":"lightrag","messages":[{"role":"user","content":"/local What are specific details?"}],"max_tokens":100}' 2>/dev/null); then
                 and_then "Local query mode (/local) endpoint accessible"
                 
                 # Test hybrid query mode (default)
                 local hybrid_response
-                if hybrid_response=$(curl -s -k -X POST https://rag.dev.localhost/v1/chat/completions \
+                if hybrid_response=$(curl -s -k -X POST https://rag.${PUBLISH_DOMAIN:-dev.localhost}/v1/chat/completions \
                     -H "Content-Type: application/json" \
                     -d '{"model":"lightrag","messages":[{"role":"user","content":"What is this about?"}],"max_tokens":100}' 2>/dev/null); then
                     and_then "Hybrid query mode (default) endpoint accessible"

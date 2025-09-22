@@ -37,6 +37,32 @@ run = [
     "mkdir -p docker/data/lobechat",
 ]
 
+[tasks.hosts-update]
+description = "Update /etc/hosts with resolved PUBLISH_DOMAIN using hostctl"
+run = '''
+export HOST_IP=$(bin/get-host-ip.sh)
+export PUBLISH_DOMAIN=${PUBLISH_DOMAIN:-dev.localhost}
+TEMP=$(mktemp); trap "rm -f $TEMP" EXIT; envsubst < .etchosts > "$TEMP"
+sudo hostctl replace lightrag --from "$TEMP"
+'''
+
+[tasks.hosts-show]
+description = "Show current hostctl lightrag profile status"
+run = "hostctl list lightrag"
+
+[tasks.hosts-remove]
+description = "Remove lightrag profile from /etc/hosts"
+run = "sudo hostctl remove lightrag"
+
+[tasks.hosts-update-windows]
+description = "Update Windows hosts file from WSL2 using PowerShell and hostctl"
+run = '''
+export HOST_IP=$(bin/get-host-ip.sh)
+export PUBLISH_DOMAIN=${PUBLISH_DOMAIN:-dev.localhost}
+TEMP=$(mktemp); trap "rm -f $TEMP" EXIT; envsubst < .etchosts > "$TEMP"
+powershell.exe -Command "sudo hostctl replace lightrag --from $(wslpath -w $TEMP)"
+'''
+
 [hooks]
 enter = ["mise run setup"]
 

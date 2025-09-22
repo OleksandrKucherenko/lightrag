@@ -77,7 +77,7 @@ services:
       - frontend
       - backend
     labels:
-      caddy: "https://dev.localhost"
+      caddy: "https://${PUBLISH_DOMAIN}"
       caddy.respond: "/health \"OK\" 200"
       caddy.respond_1: "/debug \"Environment: local.dev development\" 200"
       caddy.respond_2: "/* \"LightRAG Local Development Stack\" 200"
@@ -108,7 +108,7 @@ services:
       - proxy
     labels:
       # Caddy labels for Isaiah web interface
-      caddy: "https://monitor.dev.localhost"
+      caddy: "https://monitor.${PUBLISH_DOMAIN}"
       caddy.reverse_proxy: "{{upstreams 3000}}"
       caddy.basic_auth: "*"
       caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
@@ -126,7 +126,7 @@ services:
     restart: unless-stopped
     labels:
       # Caddy labels for Redis web interface
-      caddy: "https://kv.dev.localhost"
+      caddy: "https://kv.${PUBLISH_DOMAIN}"
       caddy.reverse_proxy: "{{upstreams 6379}}"
     depends_on:
       - proxy
@@ -190,7 +190,7 @@ services:
       - 3090:3000
     labels:
       # Caddy labels for automatic subdomain routing
-      caddy: "https://graph.dev.localhost"
+      caddy: "https://graph.${PUBLISH_DOMAIN}"
       caddy.reverse_proxy: "{{upstreams 3000}}"
     depends_on:
       - proxy
@@ -222,7 +222,7 @@ services:
       - 6334:6334
     labels:
       # Caddy labels for automatic subdomain routing
-      caddy: "https://vector.dev.localhost"
+      caddy: "https://vector.${PUBLISH_DOMAIN}"
       caddy.reverse_proxy: "{{upstreams 6333}}"
     healthcheck:
       <<: *default-healthcheck
@@ -258,7 +258,7 @@ services:
       - 9080:9621
     labels:
       # Caddy labels for automatic subdomain routing
-      caddy: "https://rag.dev.localhost"
+      caddy: "https://rag.${PUBLISH_DOMAIN}"
       caddy.reverse_proxy: "{{upstreams 9621}}"
     healthcheck:
       <<: *default-healthcheck
@@ -295,7 +295,7 @@ services:
       - 3210:3210
     labels:
       # Caddy labels for automatic subdomain routing
-      caddy: "https://lobechat.dev.localhost"
+      caddy: "https://lobechat.${PUBLISH_DOMAIN}"
       caddy.reverse_proxy: "{{upstreams 3210}}"
     healthcheck:
       <<: *default-healthcheck

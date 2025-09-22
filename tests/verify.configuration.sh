@@ -207,7 +207,7 @@ check_compose_services() {
 
 check_reverse_proxy() {
   log_section "Reverse Proxy"
-  local url="https://dev.localhost/"
+  local url="https://${PUBLISH_DOMAIN:-dev.localhost}/"
   local status=0 body=""
   fetch_url "GET" "$url" status body
   if [[ "$status" -eq 200 && "$body" == *"LightRAG Local Development Stack"* ]]; then
@@ -219,7 +219,7 @@ check_reverse_proxy() {
 
 check_monitor_ui() {
   log_section "Monitoring UI"
-  local url="https://monitor.dev.localhost/"
+  local url="https://monitor.${PUBLISH_DOMAIN:-dev.localhost}/"
   local status=0 body=""
   fetch_url "GET" "$url" status body
   if [[ "$status" -eq 401 || "$status" -eq 403 ]]; then
@@ -266,7 +266,7 @@ check_redis_security() {
 
 check_qdrant_security() {
   log_section "Qdrant"
-  local url="https://vector.dev.localhost/collections"
+  local url="https://vector.${PUBLISH_DOMAIN:-dev.localhost}/collections"
   local status=0 body=""
   fetch_url "GET" "$url" status body -H "Accept: application/json"
   if [[ "$status" -eq 401 || "$status" -eq 403 ]]; then
@@ -322,7 +322,7 @@ check_lightrag_api() {
   
   # First check if service is healthy
   local health_status=0 health_body=""
-  fetch_url "GET" "https://rag.dev.localhost/health" health_status health_body
+  fetch_url "GET" "https://rag.${PUBLISH_DOMAIN:-dev.localhost}/health" health_status health_body
   if [[ "$health_status" -eq 200 ]]; then
     if echo "$health_body" | jq -e '.status == "healthy"' >/dev/null 2>&1; then
       record_result "lightrag:health" "PASS" "Health endpoint reports healthy"
@@ -338,7 +338,7 @@ check_lightrag_api() {
   fi
   
   # Test unauthorized access
-  local url="https://rag.dev.localhost/documents"
+  local url="https://rag.${PUBLISH_DOMAIN:-dev.localhost}/documents"
   local status=0 body=""
   fetch_url "GET" "$url" status body -H "Accept: application/json"
   if [[ "$status" -eq 401 || "$status" -eq 403 ]]; then
@@ -367,7 +367,7 @@ check_lightrag_api() {
 check_lightrag_ollama() {
   log_section "LightRAG Ollama API"
   local status=0 body=""
-  fetch_url "GET" "https://rag.dev.localhost/api/tags" status body -H "Accept: application/json"
+  fetch_url "GET" "https://rag.${PUBLISH_DOMAIN:-dev.localhost}/api/tags" status body -H "Accept: application/json"
   if [[ "$status" -eq 200 ]] && echo "$body" | jq -e '.models | map(select(.name == "lightrag:latest")) | length > 0' >/dev/null 2>&1; then
     record_result "ollama:models" "PASS" "lightrag:latest available via /api/tags"
   else
@@ -389,8 +389,8 @@ check_network_diagnostics() {
   # Check if hosts file entries exist
   if command -v getent >/dev/null 2>&1; then
     local hosts_check=""
-    hosts_check=$(getent hosts dev.localhost 2>/dev/null || echo "not found")
-    record_result "network:hosts" "INFO" "dev.localhost resolves to: ${hosts_check}"
+    hosts_check=$(getent hosts ${PUBLISH_DOMAIN:-dev.localhost} 2>/dev/null || echo "not found")
+    record_result "network:hosts" "INFO" "${PUBLISH_DOMAIN:-dev.localhost} resolves to: ${hosts_check}"
   fi
   
   # Test basic connectivity to proxy
@@ -403,7 +403,7 @@ check_network_diagnostics() {
 
 check_lobechat_ui() {
   log_section "LobeChat"
-  local base="https://lobechat.dev.localhost"
+  local base="https://lobechat.${PUBLISH_DOMAIN:-dev.localhost}"
   local status=0 body=""
 
   # Test web UI accessibility

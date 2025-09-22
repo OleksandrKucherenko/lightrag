@@ -20,6 +20,31 @@
     - [LobeChat - AI Chat Interface](#lobechat---ai-chat-interface)
 
 
+## LightRAG Local Development Stack
+
+This repository provides a complete Docker Compose setup for running LightRAG with all its dependencies locally.
+
+## 🌐 **Configurable Domain Support**
+
+The stack now supports configurable domains via the `PUBLISH_DOMAIN` environment variable. By default, all services use `dev.localhost`, but you can customize this for different environments:
+
+```bash
+# Default configuration (in .env)
+PUBLISH_DOMAIN=dev.localhost
+
+# Custom domain examples
+PUBLISH_DOMAIN=myapp.local
+PUBLISH_DOMAIN=lightrag.internal
+PUBLISH_DOMAIN=ai.company.com
+```
+
+**Service URLs will automatically adapt:**
+- Main: `https://${PUBLISH_DOMAIN}`
+- LobeChat: `https://lobechat.${PUBLISH_DOMAIN}`
+- LightRAG API: `https://rag.${PUBLISH_DOMAIN}`
+- Monitoring: `https://monitor.${PUBLISH_DOMAIN}`
+- And all other services...
+
 ## Developer Environment setup
 
 Minimalistic Developer environment setup is required to make this solution work. Step:
@@ -74,7 +99,14 @@ cd docker/certificates
 # install root certificates
 CAROOT=$(pwd) mkcert -install
 
-# re-generate certificate 
+# re-generate certificate (replace dev.localhost with your PUBLISH_DOMAIN)
+CAROOT=$(pwd) mkcert -cert-file ${PUBLISH_DOMAIN}.pem \
+  -key-file ${PUBLISH_DOMAIN}-key.pem \
+  -p12-file ${PUBLISH_DOMAIN}.p12 \
+  ${PUBLISH_DOMAIN} "*.${PUBLISH_DOMAIN}" \
+  localhost 127.0.0.1 0.0.0.0 ::1
+
+# For default dev.localhost domain:
 CAROOT=$(pwd) mkcert -cert-file dev.localhost.pem \
   -key-file dev.localhost-key.pem \
   -p12-file dev.localhost.p12 \
@@ -127,26 +159,77 @@ scoop install main/gsudo # SUDO tool required for elevating the access
 brew install guumaster/tap/hostctl
 ```
 
-`.etchosts` is a helper for this project that contains mapping of the domains to `127.0.0.1`.
+**🎯 Smart DNS Configuration with PUBLISH_DOMAIN Support:**
 
-#### Windows
+```bash
+# Linux/macOS: Update local hosts file
+mise run hosts-update
 
-Edit file: `C:\Windows\System32\drivers\etc\hosts` 
+# WSL2: Update Windows hosts file from WSL2
+mise run hosts-update-windows
+
+# Show current hostctl profile status
+mise run hosts-show
+
+# Remove lightrag profile from hosts file
+mise run hosts-remove
+```
+
+**Multi-platform workflow:** `get-host-ip.sh` → `.etchosts` template → `envsubst` → temporary file → `hostctl replace`
+
+**Supported environments:**
+- **Linux**: Uses `127.0.0.1` 
+- **macOS**: Uses `127.0.0.1`
+- **WSL2**: Auto-detects Windows host IP (PowerShell → Docker → ip route → fallback)
+
+**Helper scripts:**
+```bash
+# Test HOST_IP detection for your environment
+tests/test-host-ip.sh
+
+# Get HOST_IP directly
+bin/get-host-ip.sh
+# Returns: 127.0.0.1 (Linux/macOS) or 192.168.x.x (WSL2)
+```
+
+**Examples:**
+
+Linux/macOS:
+```bash
+❯ mise run hosts-update
+🌐 All services now accessible at *.dev.localhost
+```
+
+WSL2 → Windows:
+```bash
+❯ mise run hosts-update-windows
+🌐 All services now accessible at *.dev.localhost from Windows
+```
+
+#### Windows (Manual Method)
+
+**Note:** The `mise run hosts-update` task above works in WSL2 and will automatically detect the correct Windows host IP.
+
+For manual configuration, edit: `C:\Windows\System32\drivers\etc\hosts` 
 
 ```txt
 # Added by Docker Desktop
 192.168.1.103 host.docker.internal
 192.168.1.103 gateway.docker.internal
 
-# Required
-192.168.1.103 dev.localhost
-192.168.1.103 monitor.dev.localhost
-192.168.1.103 kv.dev.localhost
-192.168.1.103 graph.dev.localhost
-192.168.1.103 rag.dev.localhost
+# LightRAG Services (replace with your PUBLISH_DOMAIN)
+192.168.1.103 ${PUBLISH_DOMAIN}
+192.168.1.103 monitor.${PUBLISH_DOMAIN}
+192.168.1.103 kv.${PUBLISH_DOMAIN}
+192.168.1.103 graph.${PUBLISH_DOMAIN}
+192.168.1.103 rag.${PUBLISH_DOMAIN}
+192.168.1.103 vector.${PUBLISH_DOMAIN}
+192.168.1.103 lobechat.${PUBLISH_DOMAIN}
 
-# Pattern:
-# 192.168.1.103 *.dev.localhost
+# Example with dev.localhost:
+# 192.168.1.103 dev.localhost
+# 192.168.1.103 monitor.dev.localhost
+# etc...
 ```
 
 ```bash
@@ -341,3 +424,43 @@ docker compose exec lobechat env | grep -E "(DATABASE_URL|REDIS_URL|OLLAMA_PROXY
 # Test LightRAG connectivity
 docker compose exec lobechat sh -c "wget -qO- http://rag:9621/health | jq '.status'"
 ```
+
+## 🧪 Testing
+
+The project includes comprehensive test suites following TDD principles with GIVEN/WHEN/THEN structure.
+
+### Run All Tests
+```bash
+# Complete test suite with detailed output
+tests/test.suite.sh
+
+# Individual test categories
+tests/test.suite.sh health          # Service health checks
+tests/test.suite.sh integration     # Service connectivity
+tests/test.suite.sh security        # Security configuration
+tests/test.suite.sh lobechat-ssl    # SSL/TLS validation
+```
+
+### Specialized Tests
+```bash
+# Test HOST_IP detection for your environment
+tests/test-host-ip.sh
+
+# Test domain configuration
+tests/test.domain.configuration.sh
+
+# Comprehensive configuration verification
+tests/verify.configuration.sh
+```
+
+### Test Categories
+- **Infrastructure** - Directory structure and basic setup
+- **Environment** - Configuration validation
+- **Docker** - Compose file validation
+- **Health** - Service status checks
+- **Security** - Authentication and encryption
+- **Integration** - Inter-service connectivity
+- **Performance** - Response time benchmarks
+- **Functionality** - LightRAG query modes (/global, /local, /hybrid)
+
+See [`tests/README.md`](tests/README.md) for detailed testing documentation.

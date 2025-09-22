@@ -36,32 +36,33 @@
 
 ## Phase 3.1: Setup ✅ **COMPLETED**
 - [x] T001 Create required directory structure: `./docker/data/lobechat` with proper permissions ✅ **DONE**
-- [x] T002 [P] Verify SSL certificates exist in `./docker/ssl/` (dev.localhost.pem, dev.localhost-key.pem) ✅ **DONE**
+- [x] T002 [P] Verify SSL certificates exist in `./docker/ssl/` (${PUBLISH_DOMAIN}.pem, ${PUBLISH_DOMAIN}-key.pem) ✅ **DONE**
 - [x] T003 [P] Update `.gitignore` to exclude `docker/data/lobechat/*` runtime data ✅ **DONE**
 - [x] T004 [P] Update `mise.toml` setup task to include lobechat directory creation ✅ **DONE**
-- [x] T005 [P] Update `.etchosts` with lobechat.dev.localhost subdomain entry ✅ **DONE**
-- [x] T005b **NEW** Generate WSL2-specific `.etchosts.windows` using Windows LAN IP (192.168.112.1) from `bin/diag.wsl2.sh` ✅ **COMPLETED**
-  Instead of running `bin/diag.wsl2.sh` (which is slow), do only one required call to capture the required IP address.
-  Make script for generating `.etchosts.windows` file in `bin/make.etchosts.windows.sh`.
+- [x] T005 [P] Update `.etchosts` with lobechat.${PUBLISH_DOMAIN} subdomain entry ✅ **DONE**
+- [x] T005b **UPDATED** Multi-platform host IP detection and hosts management ✅ **COMPLETED**
+  Replaced static file generation with dynamic multi-platform approach:
   ```bash
-  # GIVEN: WSL2 environment detected with Windows LAN IP 192.168.1.103
-  # WHEN: Creating .etchosts file for WSL2 networking
-  # THEN: All dev.localhost subdomains should point to Windows host IP
+  # GIVEN: Any environment (Linux, macOS, WSL2)
+  # WHEN: Running hosts update
+  # THEN: Appropriate IP is detected and hosts are updated dynamically
   # 
-  # Current (incorrect): 127.0.0.1 dev.localhost
-  # Required (WSL2):     192.168.1.103 dev.localhost
+  # Implementation:
+  # - bin/get-host-ip.sh: Universal IP detection helper
+  # - mise run hosts-update: Linux/macOS hosts update
+  # - mise run hosts-update-windows: WSL2 → Windows hosts update
+  # - .etchosts: Universal template with environment variables
   #
-  # Use bin/diag.wsl2.sh to detect Windows LAN IP automatically
-  # Create/Update .etchosts.windows with all service subdomains using correct IP
+  # Deprecated: bin/make.etchosts.windows.sh, bin/hosts-update*.sh (moved to .deprecated/)
   ```
 
 ## Phase 3.2: Tests First (TDD) ✅ **COMPLETED**
 **CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
-- [x] T006 [P] Service health test for LobeChat container in `bin/test.suite.sh` ✅ **DONE** (line 193)
-- [x] T007 [P] Integration test LobeChat → LightRAG connectivity in `bin/test.suite.sh` ✅ **DONE** (line 250)
-- [x] T008 [P] Integration test LobeChat → Redis connectivity in `bin/test.suite.sh` ✅ **COMPLETED**
-- [x] T009 [P] API endpoint test for LobeChat web interface in `bin/test.suite.sh` ✅ **COMPLETED**
-- [x] T010 [P] SSL/TLS test for https://lobechat.dev.localhost in `bin/test.suite.sh` ✅ **COMPLETED**
+- [x] T006 [P] Service health test for LobeChat container in `tests/test.suite.sh` ✅ **DONE** (line 193)
+- [x] T007 [P] Integration test LobeChat → LightRAG connectivity in `tests/test.suite.sh` ✅ **DONE** (line 250)
+- [x] T008 [P] Integration test LobeChat → Redis connectivity in `tests/test.suite.sh` ✅ **COMPLETED**
+- [x] T009 [P] API endpoint test for LobeChat web interface in `tests/test.suite.sh` ✅ **COMPLETED**
+- [x] T010 [P] SSL/TLS test for https://lobechat.${PUBLISH_DOMAIN} in `tests/test.suite.sh` ✅ **COMPLETED**
 
 ## Phase 3.3: Core Implementation ✅ **COMPLETED**
 - [x] T011 Verify `.env.lobechat` configuration matches plan.md requirements ✅ **DONE**
@@ -72,16 +73,16 @@
 
 ## Phase 3.4: Integration ✅ **COMPLETED**
 - [x] T016 Configure Caddy reverse proxy labels for LobeChat service ✅ **DONE** (docker-compose.yaml lines 297-299)
-- [x] T017 Test HTTPS access via https://lobechat.dev.localhost ✅ **READY** (Service running, requires .etchosts.windows setup)
+- [x] T017 Test HTTPS access via https://lobechat.${PUBLISH_DOMAIN} ✅ **READY** (Service running, requires .etchosts.windows setup)
 - [x] T018 Verify LobeChat can access LightRAG API endpoints ✅ **CONFIGURED** (Internal networking ready)
 - [x] T019 Test Redis database separation (DB 2 and 3 for LobeChat) ✅ **CONFIGURED** (Environment variables set)
 - [x] T020 Validate OpenAI-compatible API proxy through LightRAG ✅ **CONFIGURED** (OLLAMA_PROXY_URL set)
 
 ## Phase 3.5: Polish ✅ **COMPLETED**
-- [x] T021 [P] Update `bin/verify.configuration.sh` to include LobeChat service checks ✅ **DONE** (check_lobechat_ui function exists)
-- [x] T022 [P] Performance test: LobeChat response times (<2s for UI, <5s for API) ✅ **COMPLETED** (test_lobechat_performance function added to bin/test.suite.sh)
+- [x] T021 [P] Update `tests/verify.configuration.sh` to include LobeChat service checks ✅ **DONE** (check_lobechat_ui function exists)
+- [x] T022 [P] Performance test: LobeChat response times (<2s for UI, <5s for API) ✅ **COMPLETED** (test_lobechat_performance function added to tests/test.suite.sh)
 - [x] T023 [P] Update project README.md with LobeChat access instructions ✅ **COMPLETED**
-- [x] T024 [P] Create functional test scenarios for LightRAG query modes (/global, /local, /hybrid) ✅ **COMPLETED** (test_lightrag_query_modes function added to bin/test.suite.sh)
+- [x] T024 [P] Create functional test scenarios for LightRAG query modes (/global, /local, /hybrid) ✅ **COMPLETED** (test_lightrag_query_modes function added to tests/test.suite.sh)
 - [x] T025 Run complete verification suite and document any issues ✅ **COMPLETED** (Verification scripts available)
 
 ## Dependencies ⚠️ **UPDATED WITH WSL2 CRITICAL FIX**
@@ -98,17 +99,17 @@
 ## Parallel Example
 ```bash
 # Launch T006-T010 together (test creation):
-Task: "Service health test for LobeChat container in bin/test.suite.sh"
-Task: "Integration test LobeChat → LightRAG connectivity in bin/test.suite.sh"
-Task: "Integration test LobeChat → Redis connectivity in bin/test.suite.sh"
-Task: "API endpoint test for LobeChat web interface in bin/test.suite.sh"
-Task: "SSL/TLS test for https://lobechat.dev.localhost in bin/test.suite.sh"
+Task: "Service health test for LobeChat container in tests/test.suite.sh"
+Task: "Integration test LobeChat → LightRAG connectivity in tests/test.suite.sh"
+Task: "Integration test LobeChat → Redis connectivity in tests/test.suite.sh"
+Task: "API endpoint test for LobeChat web interface in tests/test.suite.sh"
+Task: "SSL/TLS test for https://lobechat.${PUBLISH_DOMAIN} in tests/test.suite.sh"
 
 # Launch T002-T005 together (setup files):
 Task: "Verify SSL certificates exist in ./docker/ssl/"
 Task: "Update .gitignore to exclude docker/data/lobechat/*"
 Task: "Update mise.toml setup task to include lobechat directory creation"
-Task: "Update .etchosts with lobechat.dev.localhost subdomain entry"
+Task: "Update .etchosts with lobechat.${PUBLISH_DOMAIN} subdomain entry"
 ```
 
 ## Notes
@@ -148,7 +149,7 @@ Task: "Update .etchosts with lobechat.dev.localhost subdomain entry"
 
 ## Success Criteria
 - LobeChat service running and healthy in Docker
-- HTTPS access via https://lobechat.dev.localhost
+- HTTPS access via https://lobechat.${PUBLISH_DOMAIN}
 - LobeChat can query LightRAG with /global, /local, /hybrid modes
 - All verification scripts pass
 - Performance within acceptable limits

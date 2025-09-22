@@ -1,7 +1,20 @@
-127.0.0.1 dev.localhost
-127.0.0.1 monitor.dev.localhost
-127.0.0.1 kv.dev.localhost
-127.0.0.1 graph.dev.localhost
-127.0.0.1 rag.dev.localhost
-127.0.0.1 vector.dev.localhost
-127.0.0.1 lobechat.dev.localhost
+# LightRAG Development Stack - Hosts Template
+# 
+# This file contains environment variable templates that are preprocessed
+# before being passed to hostctl.
+#
+# USAGE:
+#   bin/hosts-update.sh     - Preprocesses this file and updates hosts
+#   mise run hosts-update   - Same as above using mise
+#
+# Variables with defaults:
+#   HOST_IP: IP address (default: 127.0.0.1, auto-detected for WSL2)
+#   PUBLISH_DOMAIN: Domain name (default: dev.localhost, from .env)
+#
+${HOST_IP:-127.0.0.1} ${PUBLISH_DOMAIN:-dev.localhost}
+${HOST_IP:-127.0.0.1} monitor.${PUBLISH_DOMAIN:-dev.localhost}
+${HOST_IP:-127.0.0.1} kv.${PUBLISH_DOMAIN:-dev.localhost}
+${HOST_IP:-127.0.0.1} graph.${PUBLISH_DOMAIN:-dev.localhost}
+${HOST_IP:-127.0.0.1} rag.${PUBLISH_DOMAIN:-dev.localhost}
+${HOST_IP:-127.0.0.1} vector.${PUBLISH_DOMAIN:-dev.localhost}
+${HOST_IP:-127.0.0.1} lobechat.${PUBLISH_DOMAIN:-dev.localhost}

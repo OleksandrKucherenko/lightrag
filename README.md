@@ -17,6 +17,7 @@
   - [Services](#services)
     - [Caddy](#caddy)
     - [Lazydocker Web UI](#lazydocker-web-ui)
+    - [LobeChat - AI Chat Interface](#lobechat---ai-chat-interface)
 
 
 ## Developer Environment setup
@@ -289,4 +290,54 @@ docker run --rm caddy:2-alpine caddy hash-password --plaintext admin
 
 # Test Url
 curl -v http://monitor.dev.localhost --user admin:admin
- ```
+```
+
+### LobeChat - AI Chat Interface
+
+LobeChat provides a modern TypeScript-based web interface for interacting with the LightRAG system.
+
+**Access URL**: https://lobechat.dev.localhost
+
+**Features**:
+- Modern chat interface with LightRAG integration
+- Support for multiple query modes: `/global`, `/local`, `/hybrid`
+- Redis-backed session storage
+- OpenAI-compatible API proxy through LightRAG
+
+**Testing Commands**:
+```bash
+# Test LobeChat web interface
+curl -I https://lobechat.dev.localhost
+
+# Test internal connectivity (from container)
+docker compose exec lobechat wget -qO- http://rag:9621/health
+
+# Check LobeChat logs
+docker compose logs lobechat
+
+# Test Redis connectivity
+docker compose exec kv redis-cli -a "${REDIS_PASSWORD}" ping
+```
+
+**Query Modes**:
+- **Default/Hybrid**: `What is this about?` - Uses hybrid search approach
+- **Global Search**: `/global Key insights?` - Searches across entire knowledge graph
+- **Local Search**: `/local Specific details?` - Focused local search
+- **Mixed Approach**: `/mix Comprehensive analysis?` - Combines multiple approaches
+
+**Configuration**:
+- Database: Redis DB 2 (sessions) and DB 3 (cache)
+- LightRAG Proxy: `http://rag:9621/v1` (OpenAI-compatible)
+- Access Code: Set via `LOBECHAT_ACCESS_CODE` environment variable (optional)
+
+**Troubleshooting**:
+```bash
+# Check service status
+docker compose ps lobechat
+
+# Verify environment configuration
+docker compose exec lobechat env | grep -E "(DATABASE_URL|REDIS_URL|OLLAMA_PROXY_URL)"
+
+# Test LightRAG connectivity
+docker compose exec lobechat sh -c "wget -qO- http://rag:9621/health | jq '.status'"
+```

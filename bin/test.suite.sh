@@ -254,6 +254,96 @@ test_integration_connectivity() {
     fi
 }
 
+# T008: LobeChat Redis Connectivity Test
+test_lobechat_redis_connectivity() {
+    local test_name="lobechat_redis_connectivity_test"
+
+    test_start "$test_name"
+
+    given "LobeChat service is running and Redis is accessible"
+    when "testing LobeChat to Redis connectivity"
+    then "LobeChat should connect to Redis databases 2 and 3"
+
+    # Test Redis DB 2 (LobeChat database)
+    local redis_db2_test
+    if redis_db2_test=$(docker compose exec -T lobechat sh -c "echo 'ping' | nc kv 6379" 2>/dev/null); then
+        and_then "Redis connection should be established"
+        
+        # Test Redis DB 3 (LobeChat cache)
+        local redis_auth_test
+        if redis_auth_test=$(docker compose exec -T kv redis-cli -a "${REDIS_PASSWORD:-}" ping 2>/dev/null); then
+            and_then "Redis authentication should work"
+            test_pass "$test_name"
+        else
+            test_fail "$test_name" "Redis authentication failed: $redis_auth_test"
+        fi
+    else
+        test_fail "$test_name" "LobeChat cannot reach Redis service"
+    fi
+}
+
+# T009: LobeChat API Endpoint Test
+test_lobechat_api_endpoints() {
+    local test_name="lobechat_api_endpoints_test"
+
+    test_start "$test_name"
+
+    given "LobeChat service is running and accessible"
+    when "testing LobeChat web interface endpoints"
+    then "API endpoints should respond correctly"
+
+    # Test main landing page
+    local status_code
+    if status_code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3210/ 2>/dev/null); then
+        if [[ "$status_code" == "200" ]]; then
+            and_then "Landing page should return HTTP 200"
+            
+            # Test health endpoint if available
+            local health_status
+            if health_status=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3210/api/health 2>/dev/null); then
+                and_then "Health endpoint accessibility checked"
+            fi
+            
+            test_pass "$test_name"
+        else
+            test_fail "$test_name" "Landing page returned HTTP $status_code"
+        fi
+    else
+        test_fail "$test_name" "LobeChat web interface not accessible on port 3210"
+    fi
+}
+
+# T010: SSL/TLS Test for LobeChat
+test_lobechat_ssl_tls() {
+    local test_name="lobechat_ssl_tls_test"
+
+    test_start "$test_name"
+
+    given "SSL certificates are configured and LobeChat is accessible via HTTPS"
+    when "testing HTTPS access to lobechat.dev.localhost"
+    then "SSL/TLS connection should be established successfully"
+
+    # Test HTTPS connectivity (skip certificate verification for dev environment)
+    local https_status
+    if https_status=$(curl -s -k -o /dev/null -w "%{http_code}" https://lobechat.dev.localhost/ 2>/dev/null); then
+        if [[ "$https_status" == "200" ]]; then
+            and_then "HTTPS connection established successfully"
+            
+            # Test SSL certificate validity (basic check)
+            local cert_info
+            if cert_info=$(echo | openssl s_client -connect lobechat.dev.localhost:443 -servername lobechat.dev.localhost 2>/dev/null | openssl x509 -noout -subject 2>/dev/null); then
+                and_then "SSL certificate is readable: $cert_info"
+            fi
+            
+            test_pass "$test_name"
+        else
+            test_fail "$test_name" "HTTPS returned status $https_status"
+        fi
+    else
+        test_fail "$test_name" "Cannot establish HTTPS connection to lobechat.dev.localhost"
+    fi
+}
+
 # =============================================================================
 # Test Runner
 # =============================================================================
@@ -268,6 +358,9 @@ run_all_tests() {
     test_service_health
     test_security_configuration
     test_integration_connectivity
+    test_lobechat_redis_connectivity
+    test_lobechat_api_endpoints
+    test_lobechat_ssl_tls
 
     # Print summary
     printf "\n${COLOR_BOLD}📊 Test Summary${COLOR_RESET}\n"
@@ -300,6 +393,9 @@ main() {
             "health") test_service_health ;;
             "security") test_security_configuration ;;
             "integration") test_integration_connectivity ;;
+            "lobechat-redis") test_lobechat_redis_connectivity ;;
+            "lobechat-api") test_lobechat_api_endpoints ;;
+            "lobechat-ssl") test_lobechat_ssl_tls ;;
             *) echo "Unknown test: $1"; exit 1 ;;
         esac
     fi

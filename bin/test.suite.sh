@@ -49,7 +49,7 @@ when() {
     printf "${COLOR_YELLOW}WHEN:${COLOR_RESET} %s\n" "$1"
 }
 
-then() {
+then_step() {
     printf "${COLOR_GREEN}THEN:${COLOR_RESET} %s\n" "$1"
 }
 
@@ -98,7 +98,7 @@ test_infrastructure_setup() {
 
     given "project has required directory structure"
     when "checking for essential directories"
-    then "all required directories should exist"
+    then_step "all required directories should exist"
 
     local required_dirs=(
         "docker/data"
@@ -130,7 +130,7 @@ test_environment_configuration() {
 
     given "environment files exist and contain required variables"
     when "loading and validating environment configuration"
-    then "all required environment variables should be present"
+    then_step "all required environment variables should be present"
 
     # Load environment files
     local env_files=(".env" ".env.databases" ".env.lightrag" ".env.lobechat")
@@ -170,7 +170,7 @@ test_docker_compose_configuration() {
 
     given "docker-compose.yaml file exists and is valid"
     when "validating docker-compose configuration"
-    then "configuration should parse without errors"
+    then_step "configuration should parse without errors"
 
     if docker compose config >/dev/null 2>&1; then
         and_then "all services should be properly defined"
@@ -188,7 +188,7 @@ test_service_health() {
 
     given "all services are running"
     when "checking service health status"
-    then "all services should be healthy"
+    then_step "all services should be healthy"
 
     local services=("proxy" "monitor" "kv" "graph" "graph-ui" "vectors" "rag" "lobechat")
     local unhealthy_services=()
@@ -220,7 +220,7 @@ test_security_configuration() {
 
     given "security measures are properly configured"
     when "testing security endpoints"
-    then "unauthorized access should be blocked"
+    then_step "unauthorized access should be blocked"
 
     # Test Redis security
     local redis_output
@@ -244,7 +244,7 @@ test_integration_connectivity() {
 
     given "services can communicate with each other"
     when "testing internal service connectivity"
-    then "all inter-service communication should work"
+    then_step "all inter-service communication should work"
 
     # Test LobeChat to LightRAG connectivity
     if docker compose exec -T lobechat wget -qO- http://rag:9621/health >/dev/null 2>&1; then
@@ -262,7 +262,7 @@ test_lobechat_redis_connectivity() {
 
     given "LobeChat service is running and Redis is accessible"
     when "testing LobeChat to Redis connectivity"
-    then "LobeChat should connect to Redis databases 2 and 3"
+    then_step "LobeChat should connect to Redis databases 2 and 3"
 
     # Test Redis DB 2 (LobeChat database)
     local redis_db2_test
@@ -290,7 +290,7 @@ test_lobechat_api_endpoints() {
 
     given "LobeChat service is running and accessible"
     when "testing LobeChat web interface endpoints"
-    then "API endpoints should respond correctly"
+    then_step "API endpoints should respond correctly"
 
     # Test main landing page
     local status_code
@@ -321,7 +321,7 @@ test_lobechat_ssl_tls() {
 
     given "SSL certificates are configured and LobeChat is accessible via HTTPS"
     when "testing HTTPS access to lobechat.dev.localhost"
-    then "SSL/TLS connection should be established successfully"
+    then_step "SSL/TLS connection should be established successfully"
 
     # Test HTTPS connectivity (skip certificate verification for dev environment)
     local https_status
@@ -344,6 +344,118 @@ test_lobechat_ssl_tls() {
     fi
 }
 
+# T022: Performance Test for LobeChat Response Times
+test_lobechat_performance() {
+    local test_name="lobechat_performance_test"
+
+    test_start "$test_name"
+
+    given "LobeChat service is running and accessible"
+    when "measuring response times for UI and API endpoints"
+    then_step "response times should be within acceptable limits (<2s for UI, <5s for API)"
+
+    # Test UI response time (<2s requirement)
+    local ui_start_time ui_end_time ui_response_time
+    ui_start_time=$(date +%s.%N)
+    
+    local ui_status
+    if ui_status=$(curl -s -k -o /dev/null -w "%{http_code}" https://lobechat.dev.localhost/ 2>/dev/null); then
+        ui_end_time=$(date +%s.%N)
+        ui_response_time=$(echo "$ui_end_time - $ui_start_time" | bc -l)
+        
+        if [[ "$ui_status" == "200" ]]; then
+            and_then "UI endpoint responded with HTTP 200"
+            
+            # Check if response time is under 2 seconds
+            if (( $(echo "$ui_response_time < 2.0" | bc -l) )); then
+                and_then "UI response time: ${ui_response_time}s (< 2s requirement met)"
+                
+                # Test API response time (<5s requirement)
+                local api_start_time api_end_time api_response_time
+                api_start_time=$(date +%s.%N)
+                
+                local api_status
+                if api_status=$(curl -s -k -o /dev/null -w "%{http_code}" https://lobechat.dev.localhost/api/health 2>/dev/null); then
+                    api_end_time=$(date +%s.%N)
+                    api_response_time=$(echo "$api_end_time - $api_start_time" | bc -l)
+                    
+                    if (( $(echo "$api_response_time < 5.0" | bc -l) )); then
+                        and_then "API response time: ${api_response_time}s (< 5s requirement met)"
+                        test_pass "$test_name"
+                    else
+                        test_fail "$test_name" "API response time too slow: ${api_response_time}s (>5s)"
+                    fi
+                else
+                    test_fail "$test_name" "API endpoint not accessible"
+                fi
+            else
+                test_fail "$test_name" "UI response time too slow: ${ui_response_time}s (>2s)"
+            fi
+        else
+            test_fail "$test_name" "UI endpoint returned HTTP $ui_status"
+        fi
+    else
+        test_fail "$test_name" "UI endpoint not accessible"
+    fi
+}
+
+# T024: Functional Test Scenarios for LightRAG Query Modes
+test_lightrag_query_modes() {
+    local test_name="lightrag_query_modes_test"
+
+    test_start "$test_name"
+
+    given "LightRAG service is running with different query modes available"
+    when "testing /global, /local, and /hybrid query modes through LobeChat"
+    then_step "all query modes should be accessible and return appropriate responses"
+
+    # Test LightRAG health first
+    local rag_health
+    if rag_health=$(curl -s -k https://rag.dev.localhost/health 2>/dev/null); then
+        and_then "LightRAG service is accessible"
+        
+        # Test global query mode
+        local global_response
+        if global_response=$(curl -s -k -X POST https://rag.dev.localhost/v1/chat/completions \
+            -H "Content-Type: application/json" \
+            -d '{"model":"lightrag","messages":[{"role":"user","content":"/global What are the key insights?"}],"max_tokens":100}' 2>/dev/null); then
+            and_then "Global query mode (/global) endpoint accessible"
+            
+            # Test local query mode
+            local local_response
+            if local_response=$(curl -s -k -X POST https://rag.dev.localhost/v1/chat/completions \
+                -H "Content-Type: application/json" \
+                -d '{"model":"lightrag","messages":[{"role":"user","content":"/local What are specific details?"}],"max_tokens":100}' 2>/dev/null); then
+                and_then "Local query mode (/local) endpoint accessible"
+                
+                # Test hybrid query mode (default)
+                local hybrid_response
+                if hybrid_response=$(curl -s -k -X POST https://rag.dev.localhost/v1/chat/completions \
+                    -H "Content-Type: application/json" \
+                    -d '{"model":"lightrag","messages":[{"role":"user","content":"What is this about?"}],"max_tokens":100}' 2>/dev/null); then
+                    and_then "Hybrid query mode (default) endpoint accessible"
+                    
+                    # Verify responses are different (basic validation)
+                    if [[ "$global_response" != "$local_response" ]] || [[ "$local_response" != "$hybrid_response" ]]; then
+                        and_then "Query modes return different responses as expected"
+                        test_pass "$test_name"
+                    else
+                        test_fail "$test_name" "Query modes returned identical responses (unexpected)"
+                    fi
+                else
+                    test_fail "$test_name" "Hybrid query mode not accessible"
+                fi
+            else
+                test_fail "$test_name" "Local query mode not accessible"
+            fi
+        else
+            test_fail "$test_name" "Global query mode not accessible"
+        fi
+    else
+        test_fail "$test_name" "LightRAG service not accessible"
+    fi
+}
+
 # =============================================================================
 # Test Runner
 # =============================================================================
@@ -361,6 +473,8 @@ run_all_tests() {
     test_lobechat_redis_connectivity
     test_lobechat_api_endpoints
     test_lobechat_ssl_tls
+    test_lobechat_performance
+    test_lightrag_query_modes
 
     # Print summary
     printf "\n${COLOR_BOLD}📊 Test Summary${COLOR_RESET}\n"
@@ -396,6 +510,8 @@ main() {
             "lobechat-redis") test_lobechat_redis_connectivity ;;
             "lobechat-api") test_lobechat_api_endpoints ;;
             "lobechat-ssl") test_lobechat_ssl_tls ;;
+            "lobechat-performance") test_lobechat_performance ;;
+            "lightrag-query-modes") test_lightrag_query_modes ;;
             *) echo "Unknown test: $1"; exit 1 ;;
         esac
     fi

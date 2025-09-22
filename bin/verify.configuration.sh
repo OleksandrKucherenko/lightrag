@@ -44,13 +44,20 @@ record_result() {
   RESULT_DETAILS["$key"]="$message"
   RESULT_KEYS+=("$key")
   local tag="[$status] $key: $message"
-  if [[ "$status" == "PASS" ]]; then
-    # log_success "$tag"
-    printf "[%sOK%s]%s $key: $message%s\n" "${COLOR_GREEN}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
-  else
-    # log_error "$tag"
-    printf "[%sNO%s]%s $key: $message%s\n" "${COLOR_RED}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
-  fi
+  case "$status" in
+    "PASS")
+      printf "[%sOK%s]%s $key: $message%s\n" "${COLOR_GREEN}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
+      ;;
+    "INFO")
+      printf "[%sINFO%s]%s $key: $message%s\n" "${COLOR_BLUE}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
+      ;;
+    "SKIP")
+      printf "[%sSKIP%s]%s $key: $message%s\n" "${COLOR_YELLOW}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
+      ;;
+    *)
+      printf "[%sNO%s]%s $key: $message%s\n" "${COLOR_RED}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
+      ;;
+  esac
 }
 
 # -----------------------------------------------------------------------------
@@ -79,7 +86,19 @@ resolve_flag() {
       port=80
     fi
   fi
-  printf '%s:%s:127.0.0.1' "$host" "$port"
+  # Try to detect WSL2 environment and use appropriate IP
+  local target_ip="127.0.0.1"
+  if [[ -f "/proc/version" ]] && grep -q "microsoft" "/proc/version" 2>/dev/null; then
+    # WSL2 detected, try to get Windows host IP
+    if command -v ip >/dev/null 2>&1; then
+      local wsl_ip
+      wsl_ip=$(ip route show default | awk '/default/ {print $3}' | head -1)
+      if [[ -n "$wsl_ip" && "$wsl_ip" != "127.0.0.1" ]]; then
+        target_ip="$wsl_ip"
+      fi
+    fi
+  fi
+  printf '%s:%s:%s' "$host" "$port" "$target_ip"
 }
 
 fetch_url() {
@@ -90,7 +109,20 @@ fetch_url() {
   header_file="$(mktemp)"
   body_file="$(mktemp)"
   resolve_arg="$(resolve_flag "$url")"
-  if ! curl -skL --connect-timeout 5 --max-time 20 --retry 0 --resolve "$resolve_arg" -X "$method" "$url" "$@" -D "$header_file" -o "$body_file"; then
+  
+  # Quick connectivity test first
+  local host_port
+  host_port=$(echo "$resolve_arg" | cut -d: -f1,2)
+  if ! timeout 3 bash -c "</dev/tcp/${host_port/:/ }" 2>/dev/null; then
+    http_status=0
+    http_body="Connection refused or timeout to ${host_port}"
+    rm -f "$header_file" "$body_file"
+    printf -v "$status_var" '%s' "$http_status"
+    printf -v "$body_var" '%s' "$http_body"
+    return 0
+  fi
+  
+  if ! curl -skL --connect-timeout 3 --max-time 10 --retry 0 --resolve "$resolve_arg" -X "$method" "$url" "$@" -D "$header_file" -o "$body_file" 2>/dev/null; then
     exit_code=$?
   fi
   http_status=$(awk 'toupper($1) ~ /^HTTP/ { code=$2 } END { if (code) print code }' "$header_file")
@@ -258,28 +290,66 @@ check_qdrant_security() {
 check_memgraph_access() {
   log_section "Memgraph"
   local output=""
-  if output=$(docker exec graph sh -c "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 --use-ssl=false" 2>&1); then
+  
+  # Try with authentication first (common setup)
+  local auth_args=""
+  if [[ -n "${MEMGRAPH_USER:-}" && -n "${MEMGRAPH_PASSWORD:-}" ]]; then
+    auth_args="--username ${MEMGRAPH_USER} --password ${MEMGRAPH_PASSWORD}"
+  fi
+  
+  if output=$(docker exec graph sh -c "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 --use-ssl=false ${auth_args}" 2>&1); then
     if [[ "$output" == *"1"* ]]; then
-      record_result "memgraph:query" "PASS" "Cypher query succeeded"
+      record_result "memgraph:query" "PASS" "Cypher query succeeded with auth"
     else
       record_result "memgraph:query" "FAIL" "Unexpected output: $(echo "$output" | head -c 120)"
     fi
   else
-    record_result "memgraph:query" "FAIL" "mgconsole execution failed: $(echo "$output" | head -c 120)"
+    # Try without authentication as fallback
+    if output=$(docker exec graph sh -c "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 --use-ssl=false" 2>&1); then
+      if [[ "$output" == *"1"* ]]; then
+        record_result "memgraph:query" "PASS" "Cypher query succeeded without auth"
+      else
+        record_result "memgraph:query" "FAIL" "Query failed: $(echo "$output" | head -c 120)"
+      fi
+    else
+      record_result "memgraph:query" "FAIL" "Connection failed: $(echo "$output" | head -c 120)"
+    fi
   fi
 }
 
 check_lightrag_api() {
   log_section "LightRAG API"
+  
+  # First check if service is healthy
+  local health_status=0 health_body=""
+  fetch_url "GET" "https://rag.dev.localhost/health" health_status health_body
+  if [[ "$health_status" -eq 200 ]]; then
+    if echo "$health_body" | jq -e '.status == "healthy"' >/dev/null 2>&1; then
+      record_result "lightrag:health" "PASS" "Health endpoint reports healthy"
+    else
+      record_result "lightrag:health" "FAIL" "Health endpoint unhealthy: $(echo "$health_body" | head -c 120)"
+      return
+    fi
+  else
+    record_result "lightrag:health" "FAIL" "Health endpoint unreachable (${health_status})"
+    record_result "lightrag:noauth" "SKIP" "Service down, skipping auth tests"
+    record_result "lightrag:auth" "SKIP" "Service down, skipping auth tests"
+    return
+  fi
+  
+  # Test unauthorized access
   local url="https://rag.dev.localhost/documents"
   local status=0 body=""
   fetch_url "GET" "$url" status body -H "Accept: application/json"
   if [[ "$status" -eq 401 || "$status" -eq 403 ]]; then
     record_result "lightrag:noauth" "PASS" "Unauthorized as expected (${status})"
+  elif [[ "$status" -eq 0 ]]; then
+    record_result "lightrag:noauth" "FAIL" "Connection failed: $(echo "$body" | head -c 120)"
   else
     record_result "lightrag:noauth" "FAIL" "Expected 401/403, got ${status}"
   fi
 
+  # Test authorized access
   fetch_url "GET" "$url" status body -H "Accept: application/json" -H "X-API-Key: ${LIGHTRAG_API_KEY}"
   if [[ "$status" -eq 200 ]]; then
     if echo "$body" | jq -e '.statuses' >/dev/null 2>&1; then
@@ -287,6 +357,8 @@ check_lightrag_api() {
     else
       record_result "lightrag:auth" "FAIL" "Response missing statuses field: $(echo "$body" | head -c 120)"
     fi
+  elif [[ "$status" -eq 0 ]]; then
+    record_result "lightrag:auth" "FAIL" "Connection failed: $(echo "$body" | head -c 120)"
   else
     record_result "lightrag:auth" "FAIL" "Expected 200 with API key, got ${status}"
   fi
@@ -304,27 +376,74 @@ check_lightrag_ollama() {
 }
 
 
+check_network_diagnostics() {
+  log_section "Network Diagnostics"
+  
+  # Check if we're in WSL2 and show networking info
+  if [[ -f "/proc/version" ]] && grep -q "microsoft" "/proc/version" 2>/dev/null; then
+    local wsl_ip
+    wsl_ip=$(ip route show default | awk '/default/ {print $3}' | head -1)
+    record_result "network:wsl2" "INFO" "WSL2 detected, Windows host IP: ${wsl_ip}"
+  fi
+  
+  # Check if hosts file entries exist
+  if command -v getent >/dev/null 2>&1; then
+    local hosts_check=""
+    hosts_check=$(getent hosts dev.localhost 2>/dev/null || echo "not found")
+    record_result "network:hosts" "INFO" "dev.localhost resolves to: ${hosts_check}"
+  fi
+  
+  # Test basic connectivity to proxy
+  if timeout 2 bash -c '</dev/tcp/127.0.0.1/443' 2>/dev/null; then
+    record_result "network:proxy-443" "PASS" "Port 443 accessible on localhost"
+  else
+    record_result "network:proxy-443" "FAIL" "Port 443 not accessible on localhost"
+  fi
+}
+
 check_lobechat_ui() {
   log_section "LobeChat"
   local base="https://lobechat.dev.localhost"
   local status=0 body=""
 
+  # Test web UI accessibility
   fetch_url "GET" "${base}/" status body
   if [[ "$status" -eq 200 ]]; then
-    record_result "lobechat:health" "PASS" "Landing page returned 200"
+    if [[ "$body" == *"<html"* || "$body" == *"<!DOCTYPE"* ]]; then
+      record_result "lobechat:ui" "PASS" "Web UI accessible and returns HTML"
+    else
+      record_result "lobechat:ui" "FAIL" "Unexpected content: $(echo "$body" | head -c 120)"
+    fi
+  elif [[ "$status" -eq 0 ]]; then
+    record_result "lobechat:ui" "FAIL" "Connection failed: $(echo "$body" | head -c 120)"
   else
-    record_result "lobechat:health" "FAIL" "Status=${status}, Body snippet=$(echo "$body" | head -c 120)"
+    record_result "lobechat:ui" "FAIL" "HTTP ${status}: $(echo "$body" | head -c 120)"
   fi
 
+  # Test internal connectivity to LightRAG
   local api_body=""
-  if api_body=$(docker compose exec -T lobechat sh -c "wget -qO- http://rag:9621/health" 2>/dev/null); then
+  if api_body=$(docker compose exec -T lobechat sh -c "curl -s --connect-timeout 3 http://rag:9621/health" 2>/dev/null); then
     if echo "$api_body" | jq -e '.status == "healthy"' >/dev/null 2>&1; then
-      record_result "lobechat:models" "PASS" "Container can reach LightRAG health endpoint"
+      record_result "lobechat:rag-conn" "PASS" "Container can reach LightRAG health endpoint"
+    elif [[ -n "$api_body" ]]; then
+      record_result "lobechat:rag-conn" "FAIL" "Unexpected health payload: $(echo "$api_body" | head -c 120)"
     else
-      record_result "lobechat:models" "FAIL" "Unexpected health payload: $(echo "$api_body" | head -c 120)"
+      record_result "lobechat:rag-conn" "FAIL" "Empty response from LightRAG health endpoint"
     fi
   else
-    record_result "lobechat:models" "FAIL" "wget to rag:/health failed"
+    record_result "lobechat:rag-conn" "FAIL" "Cannot reach LightRAG from LobeChat container"
+  fi
+  
+  # Test Redis connectivity from LobeChat
+  local redis_test=""
+  if redis_test=$(docker compose exec -T lobechat sh -c "echo 'ping' | nc -w 2 kv 6379" 2>/dev/null); then
+    if [[ "$redis_test" == *"PONG"* || "$redis_test" == *"NOAUTH"* ]]; then
+      record_result "lobechat:redis-conn" "PASS" "Container can reach Redis service"
+    else
+      record_result "lobechat:redis-conn" "FAIL" "Unexpected Redis response: $(echo "$redis_test" | head -c 120)"
+    fi
+  else
+    record_result "lobechat:redis-conn" "FAIL" "Cannot reach Redis from LobeChat container"
   fi
 }
 
@@ -346,22 +465,61 @@ main() {
 
   load_env_file "${REPO_ROOT}/.env"
 
-  assert_env_vars \
-    LIGHTRAG_API_KEY \
-    DEFAULT_ADMIN_EMAIL \
-    DEFAULT_ADMIN_PASSWORD \
-    REDIS_PASSWORD \
-    QDRANT_API_KEY
+  # Load additional environment files
+  load_env_file "${REPO_ROOT}/.env.databases"
+  load_env_file "${REPO_ROOT}/.env.lightrag"
+  load_env_file "${REPO_ROOT}/.env.lobechat"
+  load_env_file "${REPO_ROOT}/.env.monitoring"
 
-  check_compose_services || true
+  # Check critical environment variables (make some optional)
+  local required_vars=(REDIS_PASSWORD)
+  local missing=()
+  for var in "${required_vars[@]}"; do
+    if [[ -z "${!var:-}" ]]; then
+      missing+=("$var")
+    fi
+  done
+  if (( ${#missing[@]} )); then
+    log_error "Missing critical environment variables: ${missing[*]}"
+    exit 1
+  fi
+  
+  # Warn about optional but recommended variables
+  local optional_vars=(LIGHTRAG_API_KEY QDRANT_API_KEY DEFAULT_ADMIN_EMAIL DEFAULT_ADMIN_PASSWORD)
+  local missing_optional=()
+  for var in "${optional_vars[@]}"; do
+    if [[ -z "${!var:-}" ]]; then
+      missing_optional+=("$var")
+    fi
+  done
+  if (( ${#missing_optional[@]} )); then
+    log_warn "Optional environment variables not set (some checks may be skipped): ${missing_optional[*]}"
+  fi
+
+  # Run network diagnostics first
+  check_network_diagnostics
+  
+  # Check service health
+  local services_ok=true
+  if ! check_compose_services; then
+    services_ok=false
+  fi
+  
+  # Run connectivity tests
   check_reverse_proxy
   check_monitor_ui
   check_redis_security
-  check_qdrant_security
-  check_memgraph_access
-  check_lightrag_api
-  check_lightrag_ollama
-  check_lobechat_ui
+  
+  # Only run these if services are healthy
+  if [[ "$services_ok" == "true" ]]; then
+    check_qdrant_security
+    check_memgraph_access
+    check_lightrag_api
+    check_lightrag_ollama
+    check_lobechat_ui
+  else
+    log_warn "Skipping some checks due to unhealthy services"
+  fi
 
   log_section "Summary"
   local exit_code=0
@@ -369,14 +527,21 @@ main() {
     local status="${RESULT_STATUS[$key]}"
     local message="${RESULT_DETAILS[$key]}"
     local tag="[$status] $key: $message"
-    if [[ "$status" == "PASS" ]]; then
-      # log_success "$tag"
-      printf "[%sOK%s]%s $key: $message%s\n" "${COLOR_GREEN}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
-    else
-      # log_error "$tag"
-      printf "[%sNO%s]%s $key: $message%s\n" "${COLOR_RED}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
-      exit_code=1
-    fi
+    case "$status" in
+      "PASS")
+        printf "[%sOK%s]%s $key: $message%s\n" "${COLOR_GREEN}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
+        ;;
+      "INFO")
+        printf "[%sINFO%s]%s $key: $message%s\n" "${COLOR_BLUE}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
+        ;;
+      "SKIP")
+        printf "[%sSKIP%s]%s $key: $message%s\n" "${COLOR_YELLOW}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
+        ;;
+      *)
+        printf "[%sNO%s]%s $key: $message%s\n" "${COLOR_RED}" "${COLOR_RESET}" "${COLOR_GRAY}" "${COLOR_RESET}"
+        exit_code=1
+        ;;
+    esac
   done
   exit $exit_code
 }

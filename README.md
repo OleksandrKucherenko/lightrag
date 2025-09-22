@@ -3,6 +3,8 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/OleksandrKucherenko/lightrag)
 
 - [Light RAG in docker container](#light-rag-in-docker-container)
+  - [LightRAG Local Development Stack](#lightrag-local-development-stack)
+  - [🌐 **Configurable Domain Support**](#-configurable-domain-support)
   - [Developer Environment setup](#developer-environment-setup)
     - [Mise Tool Setup](#mise-tool-setup)
       - [Windows](#windows)
@@ -10,7 +12,7 @@
     - [SSL Certificates](#ssl-certificates)
       - [Security Risks](#security-risks)
     - [DNS Setup](#dns-setup)
-      - [Windows](#windows-1)
+      - [Windows (Manual Method)](#windows-manual-method)
       - [Configure DNS via hostctl](#configure-dns-via-hostctl)
       - [From WSL2: publish subdomains to Windows hosts via hostctl (auto)](#from-wsl2-publish-subdomains-to-windows-hosts-via-hostctl-auto)
     - [Solution Secrets](#solution-secrets)
@@ -18,6 +20,28 @@
     - [Caddy](#caddy)
     - [Lazydocker Web UI](#lazydocker-web-ui)
     - [LobeChat - AI Chat Interface](#lobechat---ai-chat-interface)
+  - [⚡ Performance Optimization](#-performance-optimization)
+    - [System Requirements](#system-requirements)
+    - [Key Performance Settings](#key-performance-settings)
+      - [LightRAG Configuration (.env.lightrag)](#lightrag-configuration-envlightrag)
+      - [Docker Resource Limits](#docker-resource-limits)
+    - [Performance Monitoring](#performance-monitoring)
+      - [Key Metrics to Monitor](#key-metrics-to-monitor)
+      - [Expected Performance Improvements](#expected-performance-improvements)
+    - [Performance Validation](#performance-validation)
+      - [Run Performance Benchmarks](#run-performance-benchmarks)
+      - [Success Criteria](#success-criteria)
+  - [⚙️ Configuration Reference](#️-configuration-reference)
+    - [Environment Variables](#environment-variables)
+      - [Core Configuration (.env)](#core-configuration-env)
+      - [Caddy Configuration (.env.caddy)](#caddy-configuration-envcaddy)
+      - [LightRAG Configuration (.env.lightrag)](#lightrag-configuration-envlightrag-1)
+      - [LobeChat Configuration (.env.lobechat)](#lobechat-configuration-envlobechat)
+    - [Configuration Validation](#configuration-validation)
+      - [Quick Validation Commands](#quick-validation-commands)
+  - [📚 Additional Documentation](#-additional-documentation)
+    - [Detailed Guides](#detailed-guides)
+    - [Deprecated Documentation](#deprecated-documentation)
 
 
 ## LightRAG Local Development Stack
@@ -94,7 +118,7 @@ We use self-signed certificates that are created and managed by `mkcert` tool. (
 All certificates are already included into project, but you may want to regenerate them for reducing any security risks.
 
 ```bash
-cd docker/certificates
+cd docker/ssl
 
 # install root certificates
 CAROOT=$(pwd) mkcert -install
@@ -124,7 +148,7 @@ openssl pkcs12 -export -out dev.localhost.pfx -inkey dev.localhost-key.pem -in d
 In Powershell Admin:
 
 ```powershell
-cd docker\certificates
+cd docker\ssl
 # register certificate in 
 sudo Import-Certificate -FilePath rootCA.cer -CertStoreLocation Cert:\LocalMachine\Root
 ```
@@ -240,8 +264,12 @@ docker run --rm alpine sh -c "ip route | awk '/default/ { print \$3 }'"
 #### Configure DNS via hostctl
 
 ```shell
-# create configuration/profile 'lightrag' from provided file
-sudo hostctl replace lightrag --from .etchosts
+# Concept: create configuration/profile 'lightrag' from provided file
+sudo hostctl replace lightrag --from .etchosts # WARNING! It will not work!
+
+# WARNING. Use mise tasks istead. .etchosts is a template file that cannot
+#   be processed by hostctl tool directly. Required resolution of env variables
+#   for template file.
 
 # disable configuration/profile
 sudo hostctl disable lightrag
@@ -273,6 +301,7 @@ Use this when running inside WSL2 to automatically detect your Windows LAN IP fr
 Prerequisites (in Windows PowerShell):
 
 ```shell
+# install required tools on windows
 scoop install main/hostctl
 scoop install main/gsudo
 ```
@@ -280,31 +309,27 @@ scoop install main/gsudo
 Run in WSL2 at the project root:
 
 ```bash
-# 1) Detect Windows LAN IP from diagnostics (strip ANSI color codes safely)
-WIN_LAN_IP=$(bash bin/diag.wsl2.sh | sed -r 's/\x1B\[[0-9;]*[A-Za-z]//g' | awk '/Windows LAN IP/ {print $1; exit}')
-
-# 2) Prepare a temp file visible to Windows with the IP substituted
-WSL_TMP="/mnt/c/Temp/lightrag-hosts.txt"
-WIN_TMP="C:\\Temp\\lightrag-hosts.txt"
+# 1) Prepare a temp file visible to Windows with the IP substituted
 mkdir -p /mnt/c/Temp
-sed "s/127\\.0\\.0\\.1/${WIN_LAN_IP}/g" .etchosts > "$WSL_TMP"
+WSL_TMP="/mnt/c/Temp/.etchosts.lightrag.windows"
+WIN_TMP="C:\\Temp\\.etchosts.lightrag.windows"
+
+# 2) Resolve variables and prepare temp file
+export HOST_IP=$(bin/get-host-ip.sh)
+export PUBLISH_DOMAIN=${PUBLISH_DOMAIN:-dev.localhost}
+envsubst < .etchosts > "$WSL_TMP"
 
 # 3) Publish to Windows hosts with elevation (UAC prompt may appear once)
-powershell.exe -NoProfile -Command "sudo hostctl replace lightrag --from \"$WIN_TMP\"; sudo hostctl enable lightrag"
+powershell.exe -NoProfile -Command "sudo hostctl replace lightrag --from \"$WIN_TMP\""
 
-# Optional: verify
-powershell.exe -NoProfile -Command "Get-Content C:\\Windows\\System32\\drivers\\etc\\hosts | Select-String -NotMatch '^#|^$'"
-```
+# Disable hosts publishing
+powershell.exe -NoProfile -Command "sudo hostctl disable lightrag"
 
-One‑liner version:
+# Enable hosts publishing
+powershell.exe -NoProfile -Command "sudo hostctl enable lightrag"
 
-```bash
-WIN_LAN_IP=$(bash bin/diag.wsl2.sh | sed -r 's/\x1B\[[0-9;]*[A-Za-z]//g' | awk '/Windows LAN IP/ {print $1; exit}'); \
-  WSL_TMP="/mnt/c/Temp/lightrag-hosts.txt"; \
-  WIN_TMP="C:\\Temp\\lightrag-hosts.txt"; \
-  mkdir -p /mnt/c/Temp; sed "s/127\\.0\\.0\\.1/${WIN_LAN_IP}/g" .etchosts > "$WSL_TMP"; \
-  powershell.exe -NoProfile -Command "sudo hostctl replace lightrag --from \"$WIN_TMP\"; sudo hostctl enable lightrag"; \
-  powershell.exe -NoProfile -Command "Get-Content C:\\Windows\\System32\\drivers\\etc\\hosts | Select-String -NotMatch '^#|^$'"
+# Remove hosts publishing
+powershell.exe -NoProfile -Command "sudo hostctl remove lightrag"
 ```
 
 Notes:
@@ -425,42 +450,201 @@ docker compose exec lobechat env | grep -E "(DATABASE_URL|REDIS_URL|OLLAMA_PROXY
 docker compose exec lobechat sh -c "wget -qO- http://rag:9621/health | jq '.status'"
 ```
 
-## 🧪 Testing
+## ⚡ Performance Optimization
 
-The project includes comprehensive test suites following TDD principles with GIVEN/WHEN/THEN structure.
+### System Requirements
+- **Memory**: 24GB RAM minimum (with OS overhead)
+- **CPU**: 12 cores minimum (16 cores recommended)
+- **Storage**: NVMe SSD for optimal performance
+- **Network**: Low latency connection for API calls
 
-### Run All Tests
+### Key Performance Settings
+
+#### LightRAG Configuration (.env.lightrag)
 ```bash
-# Complete test suite with detailed output
-tests/test.suite.sh
+# Concurrency Optimization
+MAX_PARALLEL_INSERT=4        # Document-level parallelism (4x improvement)
+MAX_ASYNC=8                  # Chunk-level parallelism (2x improvement)
+WORKERS=6                    # Controlled worker count
 
-# Individual test categories
-tests/test.suite.sh health          # Service health checks
-tests/test.suite.sh integration     # Service connectivity
-tests/test.suite.sh security        # Security configuration
-tests/test.suite.sh lobechat-ssl    # SSL/TLS validation
+# API Optimization
+LLM_API_TIMEOUT=120
+LLM_API_RETRY_ATTEMPTS=3
+LLM_CONNECTION_POOL_SIZE=20
+EMBEDDING_BATCH_SIZE=100
 ```
 
-### Specialized Tests
-```bash
-# Test HOST_IP detection for your environment
-tests/test-host-ip.sh
+#### Docker Resource Limits
 
+```yaml
+x-deploy-small: &deploy-small
+  resources:
+    limits:
+      memory: 1G
+      cpus: '0.5'
+    reservations:
+      memory: 512M
+      cpus: '0.25'
+
+x-deploy-medium: &deploy-medium
+  resources:
+    limits:
+      memory: 4G
+      cpus: '2.0'
+    reservations:
+      memory: 2G
+      cpus: '1.0'
+
+x-deploy-large: &deploy-large
+  resources:
+    limits:
+      memory: 8G
+      cpus: '4.0'
+    reservations:
+      memory: 4G
+      cpus: '2.0'
+```
+
+### Performance Monitoring
+
+#### Key Metrics to Monitor
+```bash
+# Monitor container resources (stream)
+docker stats
+
+# Check processing logs
+docker logs rag -f --tail 100
+
+# Monitor API performance
+docker exec rag curl -s http://localhost:9621/metrics
+
+# Storage backend health
+docker exec kv redis-cli --latency-history
+docker exec vectors curl -s http://localhost:6333/metrics
+```
+
+#### Expected Performance Improvements
+- **Medium documents (1-10MB)**: 60-70% faster processing
+- **Concurrent operations**: 4x increase (8 → 32 operations)
+- **Document parallelism**: 2x increase (2 → 4 documents)
+- **System stability**: Better resource management
+
+### Performance Validation
+
+#### Run Performance Benchmarks
+```bash
+# Create benchmark document set
+mkdir -p ./benchmark-docs
+# Add 10 representative medium documents (1-10MB each)
+
+# Run baseline test
+tests/test.suite.sh performance
+
+# Monitor improvements
+docker exec rag cat /proc/meminfo | grep -E "(MemTotal|MemAvailable)"
+```
+
+#### Success Criteria
+- **Processing Time**: 60-70% reduction in document ingestion
+- **Resource Usage**: Memory usage within 6GB allocated limit
+- **Error Rate**: <5% with enhanced concurrency
+- **API Response**: <2 seconds for LLM calls
+
+## ⚙️ Configuration Reference
+
+### Environment Variables
+
+#### Core Configuration (.env)
+```bash
+# Domain Configuration
+PUBLISH_DOMAIN=dev.localhost          # Base domain for all services
+
+# Security
+COMPOSE_PROJECT_NAME=lightrag         # Docker Compose project name
+```
+
+#### Caddy Configuration (.env.caddy)
+
+```bash
+# Caddy Proxy Settings
+CADDY_DOCKER_NETWORK=lightrag_frontend
+```
+
+#### LightRAG Configuration (.env.lightrag)
+
+```bash
+# Server Configuration
+HOST=0.0.0.0
+PORT=9621
+WORKERS=6
+
+# Storage Configuration
+LIGHTRAG_KV_STORAGE=RedisKVStorage
+LIGHTRAG_VECTOR_STORAGE=QdrantVectorDBStorage
+LIGHTRAG_GRAPH_STORAGE=MemgraphStorage
+
+# Storage Connections
+REDIS_HOST=kv
+REDIS_PORT=6379
+QDRANT_URL=http://vectors:6333
+MEMGRAPH_URI=bolt://graph:7687
+
+# LLM Configuration
+LLM_BINDING=openai
+LLM_MODEL=gpt-4o-mini
+EMBEDDING_BINDING=openai
+EMBEDDING_MODEL=text-embedding-3-small
+```
+
+#### LobeChat Configuration (.env.lobechat)
+
+```bash
+# Core Configuration
+DATABASE_URL=redis://kv:6379/2
+REDIS_URL=redis://kv:6379/3
+OLLAMA_PROXY_URL=http://rag:9621/v1
+
+# Access Control (optional)
+LOBECHAT_ACCESS_CODE=dev-access-2024
+
+# App Settings
+NEXT_PUBLIC_APP_NAME="LobeChat + LightRAG"
+DEFAULT_AGENT_CONFIG={"model":"lightrag","systemRole":"AI assistant with graph knowledge"}
+```
+
+### Configuration Validation
+
+#### Quick Validation Commands
+```bash
 # Test domain configuration
 tests/test.domain.configuration.sh
 
-# Comprehensive configuration verification
-tests/verify.configuration.sh
+# Verify Docker Compose config
+docker compose config | grep caddy:
+
+# Test with custom domain
+PUBLISH_DOMAIN=test.local docker compose config | grep caddy:
+
+# Validate Caddy configuration
+docker run --rm \
+    -v "$(pwd)/docker/etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+    lucaslorentz/caddy-docker-proxy:latest \
+    validate \
+    --config /etc/caddy/Caddyfile
 ```
 
-### Test Categories
-- **Infrastructure** - Directory structure and basic setup
-- **Environment** - Configuration validation
-- **Docker** - Compose file validation
-- **Health** - Service status checks
-- **Security** - Authentication and encryption
-- **Integration** - Inter-service connectivity
-- **Performance** - Response time benchmarks
-- **Functionality** - LightRAG query modes (/global, /local, /hybrid)
+## 📚 Additional Documentation
 
-See [`tests/README.md`](tests/README.md) for detailed testing documentation.
+### Detailed Guides
+- **[Testing Framework Guide](docs/TESTING.md)**: Comprehensive testing documentation including GIVEN/WHEN/THEN patterns, test categories, and troubleshooting
+- **[Performance Monitoring & Benchmarking](docs/performance-monitoring-benchmark.md)**: Detailed performance measurement procedures, monitoring strategies, and validation methodologies
+
+### Deprecated Documentation
+The following documentation files have been moved to `.deprecated/` as their content has been consolidated into this README:
+
+- `caddy-docker-proxy-implementation-plan.md` → Configuration details now in Configuration Reference section
+- `lightrag-performance-optimization-guide.md` → Performance settings now in Performance Optimization section
+- `lightrag-performance-optimization-summary.md` → Performance overview now in Performance Optimization section
+- `custom-domain-name.md` → Domain configuration now in Configuration Reference section
+
+> **Note**: Deprecated documentation is preserved for reference but may contain outdated information. Always refer to this README for the latest configuration and setup instructions.

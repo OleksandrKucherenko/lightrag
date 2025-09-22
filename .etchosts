@@ -11,10 +11,10 @@
 #   HOST_IP: IP address (default: 127.0.0.1, auto-detected for WSL2)
 #   PUBLISH_DOMAIN: Domain name (default: dev.localhost, from .env)
 #
-${HOST_IP:-127.0.0.1} ${PUBLISH_DOMAIN:-dev.localhost}
-${HOST_IP:-127.0.0.1} monitor.${PUBLISH_DOMAIN:-dev.localhost}
-${HOST_IP:-127.0.0.1} kv.${PUBLISH_DOMAIN:-dev.localhost}
-${HOST_IP:-127.0.0.1} graph.${PUBLISH_DOMAIN:-dev.localhost}
-${HOST_IP:-127.0.0.1} rag.${PUBLISH_DOMAIN:-dev.localhost}
-${HOST_IP:-127.0.0.1} vector.${PUBLISH_DOMAIN:-dev.localhost}
-${HOST_IP:-127.0.0.1} lobechat.${PUBLISH_DOMAIN:-dev.localhost}
+${HOST_IP} ${PUBLISH_DOMAIN}
+${HOST_IP} monitor.${PUBLISH_DOMAIN}
+${HOST_IP} kv.${PUBLISH_DOMAIN}
+${HOST_IP} graph.${PUBLISH_DOMAIN}
+${HOST_IP} rag.${PUBLISH_DOMAIN}
+${HOST_IP} vector.${PUBLISH_DOMAIN}
+${HOST_IP} lobechat.${PUBLISH_DOMAIN}

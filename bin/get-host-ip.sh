@@ -85,6 +85,6 @@ detect_host_ip() {
 }
 
 # Execute detection
-echo "detecting docker host ip... (it can be slow)" >&2
+# echo "detecting docker host ip... (it can be slow)" >&2
 detect_host_ip
 

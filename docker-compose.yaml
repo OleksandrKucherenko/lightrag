@@ -181,7 +181,7 @@ services:
   # Memgraph Lab (Web UI for graph visualization)
   graph-ui:
     # ref: https://hub.docker.com/r/memgraph/lab
-    image: memgraph/lab:3.5.0
+    image: memgraph/lab:latest
     container_name: graph-ui
     restart: unless-stopped
     env_file:

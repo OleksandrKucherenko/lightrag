@@ -1,18 +1,3 @@
-# Global configuration for local development with custom SSL certificates
-{
-    # Use local SSL certificates instead of ACME
-    tls /ssl/dev.localhost.pem /ssl/dev.localhost-key.pem
-
-    # Docker provider handled automatically by lucaslorentz/caddy-docker-proxy image
-
-    # Enable HTTP/3 and other modern features
-    servers {
-        protocol {
-            network http/3
-        }
-    }
-}
-
 # Fallback for any unconfigured domains
 :80, :443 {
     # Health check endpoint

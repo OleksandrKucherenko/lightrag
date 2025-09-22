@@ -71,10 +71,9 @@ services:
     volumes:
       # access to docker socket for capturing services config
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker/certificates:/ssl:ro
       - caddy_data:/data
       - caddy_config:/config
-      # Mount SSL certificates for wildcard domain support
-      - ./docker/ssl:/ssl:ro
     networks:
       - frontend
       - backend

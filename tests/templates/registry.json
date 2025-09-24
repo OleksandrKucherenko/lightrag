@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "bash_default",
+      "label": "Bash GIVEN/WHEN/THEN check",
+      "description": "Generates a bash check script with TDD structure and LightRAG conventions.",
+      "script_type": "bash",
+      "extension": "sh",
+      "path": "bash/default.sh.tpl",
+      "categories": ["security", "storage", "communication", "environment", "monitoring", "performance", "wsl2"],
+      "placeholders": ["TITLE", "GIVEN", "WHEN", "THEN", "CHECK_ID", "COMMAND_HINT"]
+    },
+    {
+      "id": "powershell_default",
+      "label": "PowerShell GIVEN/WHEN/THEN check",
+      "description": "Generates a PowerShell check script for WSL2 Windows workflows.",
+      "script_type": "powershell",
+      "extension": "ps1",
+      "path": "powershell/default.ps1.tpl",
+      "categories": ["wsl2", "security", "environment", "communication"],
+      "placeholders": ["TITLE", "GIVEN", "WHEN", "THEN", "CHECK_ID", "COMMAND_HINT"]
+    },
+    {
+      "id": "cmd_default",
+      "label": "CMD GIVEN/WHEN/THEN check",
+      "description": "Generates a Windows CMD check script for legacy workflows.",
+      "script_type": "cmd",
+      "extension": "cmd",
+      "path": "cmd/default.cmd.tpl",
+      "categories": ["wsl2", "environment", "communication"],
+      "placeholders": ["TITLE", "GIVEN", "WHEN", "THEN", "CHECK_ID", "COMMAND_HINT"]
+    }
+  ]
+}

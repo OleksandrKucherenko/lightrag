@@ -16,6 +16,8 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CHECKS_DIR="${SCRIPT_DIR}/checks"
+TEMPLATES_DIR="${SCRIPT_DIR}/templates"
+TEMPLATE_TOOL="${SCRIPT_DIR}/tools/check_template_system.py"
 
 # Colors for output
 if command -v tput >/dev/null 2>&1 && [[ -t 1 ]]; then
@@ -158,6 +160,181 @@ load_env_files() {
       fi
     done < "$filepath"
   done
+}
+
+ensure_template_tool() {
+  if [[ ! -f "$TEMPLATE_TOOL" ]]; then
+    printf "ERROR: Template management tool not found at %s\n" "$TEMPLATE_TOOL" >&2
+    return 1
+  fi
+
+  if [[ ! -x "$TEMPLATE_TOOL" ]]; then
+    chmod +x "$TEMPLATE_TOOL" 2>/dev/null || true
+  fi
+
+  if [[ ! -x "$TEMPLATE_TOOL" ]] && ! command -v python3 >/dev/null 2>&1; then
+    printf "ERROR: python3 is required to run %s\n" "$TEMPLATE_TOOL" >&2
+    return 1
+  fi
+
+  return 0
+}
+
+run_template_tool() {
+  if [[ -x "$TEMPLATE_TOOL" ]]; then
+    "$TEMPLATE_TOOL" "$@"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 "$TEMPLATE_TOOL" "$@"
+  else
+    printf "ERROR: Unable to execute template tool (%s)\n" "$TEMPLATE_TOOL" >&2
+    return 1
+  fi
+}
+
+print_check_help() {
+  cat <<'EOF'
+/check command usage:
+
+  ./tests/verify.configuration.v3.sh /check "Security Redis authentication check. GIVEN: ... WHEN: ... THEN: ..."
+
+Supported options:
+  --description, -d   Explicit natural language description (GIVEN/WHEN/THEN)
+  --group             Override detected group (security, storage, ...)
+  --service           Override detected service name
+  --test              Override detected test name
+  --script-type       Preferred script type (bash, powershell, cmd)
+  --template-id       Use a specific template id from the registry
+  --interactive       Prompt for missing information
+  --dry-run           Print generated script without writing to disk
+  --force             Overwrite existing check file if it already exists
+  --output-dir        Target directory (defaults to tests/checks)
+  --json              Emit metadata as JSON to stdout
+  --metadata          Path to store metadata JSON alongside the generated check
+
+Additional helpers:
+  ./tests/verify.configuration.v3.sh --list-templates
+  ./tests/verify.configuration.v3.sh --validate-templates
+EOF
+}
+
+handle_check_command() {
+  local subcommand="${1:-}"
+  shift || true
+
+  ensure_template_tool || return 1
+
+  local args=()
+  local description=""
+  local have_description_flag=false
+  local have_script_type=false
+  local have_template=false
+  local have_output_dir=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help|-h)
+        print_check_help
+        return 0
+        ;;
+      --description|-d)
+        have_description_flag=true
+        args+=("$1")
+        shift
+        if [[ $# -eq 0 ]]; then
+          printf "ERROR: --description requires a value.\n" >&2
+          return 1
+        fi
+        args+=("$1")
+        shift
+        ;;
+      --script-type)
+        have_script_type=true
+        args+=("$1")
+        shift
+        if [[ $# -eq 0 ]]; then
+          printf "ERROR: --script-type requires a value.\n" >&2
+          return 1
+        fi
+        args+=("$1")
+        shift
+        ;;
+      --template-id)
+        have_template=true
+        args+=("$1")
+        shift
+        if [[ $# -eq 0 ]]; then
+          printf "ERROR: --template-id requires a value.\n" >&2
+          return 1
+        fi
+        args+=("$1")
+        shift
+        ;;
+      --group|--service|--test|--output-dir|--metadata)
+        local flag="$1"
+        args+=("$flag")
+        shift
+        if [[ $# -eq 0 ]]; then
+          printf "ERROR: %s requires a value.\n" "$flag" >&2
+          return 1
+        fi
+        args+=("$1")
+        if [[ "$flag" == "--output-dir" ]]; then
+          have_output_dir=true
+        fi
+        shift
+        ;;
+      --dry-run|--force|--interactive|--json)
+        args+=("$1")
+        shift
+        ;;
+      --)
+        args+=("$1")
+        shift
+        while [[ $# -gt 0 ]]; do
+          args+=("$1")
+          shift
+        done
+        break
+        ;;
+      -*)
+        printf "ERROR: Unknown /check option: %s\n" "$1" >&2
+        return 1
+        ;;
+      *)
+        if [[ -z "$description" ]]; then
+          description="$1"
+        else
+          printf "WARNING: Ignoring extra argument '%s' for /check command.\n" "$1" >&2
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  if [[ -n "$description" && "$have_description_flag" == false ]]; then
+    args+=("--description" "$description")
+  fi
+
+  if [[ "$have_script_type" == false && "$have_template" == false ]]; then
+    args+=("--script-type" "bash")
+  fi
+
+  if [[ "$have_output_dir" == false ]]; then
+    args+=("--output-dir" "$CHECKS_DIR")
+  fi
+
+  run_template_tool generate "${args[@]}"
+  return $?
+}
+
+handle_list_templates() {
+  ensure_template_tool || return 1
+  run_template_tool list
+}
+
+handle_validate_templates() {
+  ensure_template_tool || return 1
+  run_template_tool validate
 }
 
 format_result() {
@@ -536,6 +713,10 @@ case "${1:-}" in
     printf "\nOptions:\n"
     printf "  --help, -h     Show this help message\n"
     printf "  --list         List available check scripts\n"
+    printf "  --list-templates  List available check templates\n"
+    printf "  --validate-templates  Validate template integrity\n"
+    printf "  /check        Launch interactive/template-driven check creation\n"
+    printf "  --check-help  Detailed help for /check workflow\n"
     printf "\nConfiguration:\n"
     printf "  CHECK_TIMEOUT  Timeout for individual checks in seconds (default: %d)\n" "$CHECK_TIMEOUT"
     printf "\nEnvironment:\n"
@@ -567,6 +748,22 @@ case "${1:-}" in
       printf "  No checks directory found: %s\n" "$CHECKS_DIR"
     fi
     exit 0
+    ;;
+  --list-templates)
+    handle_list_templates
+    exit $?
+    ;;
+  --validate-templates)
+    handle_validate_templates
+    exit $?
+    ;;
+  --check-help)
+    print_check_help
+    exit 0
+    ;;
+  /check|check)
+    handle_check_command "$@"
+    exit $?
     ;;
   *)
     main "$@"

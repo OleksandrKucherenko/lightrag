@@ -177,6 +177,17 @@ STATUS|CHECK_NAME|MESSAGE|COMMAND
 
 The orchestrator automatically discovers and runs your new check based on the filename pattern. No manual registration required!
 
+### Template-Based Generator
+
+- Generate new checks directly from a description containing GIVEN/WHEN/THEN:
+  ```bash
+  ./tests/verify.configuration.v3.sh /check \
+    "Security Redis authentication check. GIVEN: Redis has password auth WHEN: I run redis-cli THEN: unauthenticated access is blocked"
+  ```
+- Use `--interactive` to supply missing fields, or provide overrides such as `--group`, `--service`, `--test`, and `--script-type`.
+- Inspect available templates with `./tests/verify.configuration.v3.sh --list-templates` and validate them via `--validate-templates`.
+- Generated files follow the `{group}-{service}-{test}.{ext}` naming pattern and default to informative status output so they will not fail the suite until you implement the logic.
+
 ## 🎨 GIVEN/WHEN/THEN Structure
 
 All tests follow BDD (Behavior-Driven Development) patterns:

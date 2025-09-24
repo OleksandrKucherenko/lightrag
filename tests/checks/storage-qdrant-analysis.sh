@@ -12,6 +12,8 @@ set -Eeuo pipefail
 
 # Load environment
 QDRANT_API_KEY="${QDRANT_API_KEY:-}"
+CURL_TIMEOUT="${CURL_TIMEOUT:-5}"
+CURL_HELPER_IMAGE="${CURL_HELPER_IMAGE:-alpine/curl:latest}"
 
 # Check if Qdrant container is running
 if ! docker compose ps -q vectors >/dev/null 2>&1; then
@@ -19,21 +21,32 @@ if ! docker compose ps -q vectors >/dev/null 2>&1; then
     exit 0
 fi
 
-# Prepare headers
+# Ensure helper image for HTTP requests is available
+if ! docker image inspect "$CURL_HELPER_IMAGE" >/dev/null 2>&1; then
+    if ! docker pull --quiet "$CURL_HELPER_IMAGE" >/dev/null 2>&1; then
+        echo "BROKEN|qdrant_storage|Unable to pull helper image $CURL_HELPER_IMAGE|docker pull $CURL_HELPER_IMAGE"
+        exit 0
+    fi
+fi
+
 headers=""
 [[ -n "$QDRANT_API_KEY" ]] && headers="-H 'api-key: $QDRANT_API_KEY'"
 
+trim_whitespace() {
+    local value="$1"
+    value="${value#${value%%[![:space:]]*}}"
+    value="${value%${value##*[![:space:]]}}"
+    printf '%s' "$value"
+}
+
 # WHEN: We analyze Qdrant collections
 if collections_result=$(docker run --rm --network container:vectors alpine/curl:latest sh -c "curl -s $headers http://localhost:6333/collections" 2>&1); then
-    # Check if response is valid JSON
     if echo "$collections_result" | jq . >/dev/null 2>&1; then
-        # Extract collection information
         collection_count=$(echo "$collections_result" | jq -r '.result.collections | length' 2>/dev/null || echo "0")
-        
+
         if [[ "$collection_count" -gt 0 ]]; then
-            # Get details for first collection
             first_collection=$(echo "$collections_result" | jq -r '.result.collections[0].name' 2>/dev/null || echo "")
-            
+
             if [[ -n "$first_collection" && "$first_collection" != "null" ]]; then
                 # Get collection details
                 if collection_info=$(docker run --rm --network container:vectors alpine/curl:latest sh -c "curl -s $headers http://localhost:6333/collections/$first_collection" 2>&1); then
@@ -54,8 +67,10 @@ if collections_result=$(docker run --rm --network container:vectors alpine/curl:
             echo "INFO|qdrant_storage|No collections found - new installation|docker run --rm --network container:vectors alpine/curl:latest curl -s $headers http://localhost:6333/collections"
         fi
     else
-        echo "BROKEN|qdrant_storage|Invalid JSON response: ${collections_result:0:50}|docker run --rm --network container:vectors alpine/curl:latest curl -s $headers http://localhost:6333/collections"
+        error_message=$(trim_whitespace "$collections_result")
+        echo "BROKEN|qdrant_storage|Invalid JSON response: ${error_message:0:80}|docker run --rm --network container:vectors alpine/curl:latest curl -s $headers http://localhost:6333/collections"
     fi
 else
-    echo "BROKEN|qdrant_storage|Cannot query collections: ${collections_result:0:50}|docker run --rm --network container:vectors alpine/curl:latest curl -s $headers http://localhost:6333/collections"
+    error_message=$(trim_whitespace "$collections_result")
+    echo "BROKEN|qdrant_storage|Cannot query collections: ${error_message:0:80}|docker run --rm --network container:vectors alpine/curl:latest curl -s $headers http://localhost:6333/collections"
 fi

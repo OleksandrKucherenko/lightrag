@@ -30,7 +30,11 @@ foreach ($subdomain in $subdomains) {
         # Test DNS resolution first
         $resolved = Resolve-DnsName "$($subdomain.Name).$domain" -ErrorAction SilentlyContinue
         if ($resolved) {
-            Write-Output "PASS|subdomain_dns|$description DNS resolves: $($subdomain.Name).$domain -> $($resolved.IPAddress)|nslookup $($subdomain.Name).$domain"
+            $ipAddresses = ($resolved | Where-Object { $_.Type -eq 'A' } | Select-Object -ExpandProperty IPAddress) -join ' '
+            if (-not $ipAddresses) {
+                $ipAddresses = ($resolved | Select-Object -ExpandProperty IPAddress -ErrorAction SilentlyContinue) -join ' '
+            }
+            Write-Output "PASS|subdomain_dns|$description DNS resolves: $($subdomain.Name).$domain -> $ipAddresses|nslookup $($subdomain.Name).$domain"
         } else {
             Write-Output "FAIL|subdomain_dns|$description DNS resolution failed: $($subdomain.Name).$domain|nslookup $($subdomain.Name).$domain"
             continue

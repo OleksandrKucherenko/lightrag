@@ -1,179 +1,306 @@
 # =============================================================================
 # WSL2 Windows Root CA Certificate Check (PowerShell)
 # =============================================================================
-# 
-# GIVEN: WSL2 environment with self-signed certificates for development
-# WHEN: We test Windows host machine root CA certificate registration
-# THEN: We verify SSL certificates are trusted by Windows system
+#
+# GIVEN: WSL2 environment with optional Windows-based TLS integration
+# WHEN: We inspect Windows certificate stores and tooling
+# THEN: We report whether mkcert certificates are available and usable
 # =============================================================================
 
-# Get domain from environment or use default
-$domain = $env:PUBLISH_DOMAIN
-if (-not $domain) {
-    $domain = "dev.localhost"
+$ErrorActionPreference = "Stop"
+$script:checkName = "windows_rootca"
+
+function Write-Result {
+    param(
+        [string]$Status,
+        [string]$Message,
+        [string]$Command
+    )
+
+    Write-Output ("{0}|{1}|{2}|{3}" -f $Status, $script:checkName, $Message, $Command)
 }
 
-# Check if we're running from WSL2 (this script should be called from WSL2)
-if ($env:WSL_DISTRO_NAME -or $env:WSLENV) {
-    Write-Output "INFO|windows_rootca|Running from WSL2 environment: $env:WSL_DISTRO_NAME|echo `$WSL_DISTRO_NAME"
-} else {
-    Write-Output "INFO|windows_rootca|Running directly on Windows (not from WSL2)|echo `$env:COMPUTERNAME"
+$script:enforceWindowsTrust = $true
+
+function Publish {
+    param(
+        [string]$Status,
+        [string]$Message,
+        [string]$Command
+    )
+
+    if ($Status -eq "FAIL" -and -not $script:enforceWindowsTrust) {
+        Write-Result "INFO" $Message $Command
+    } else {
+        Write-Result $Status $Message $Command
+    }
 }
 
-# Function to check certificate in Windows certificate store
+function Configure-Enforcement {
+    $enforceEnv = $env:WINDOWS_ROOTCA_ENFORCE
+    if ($null -ne $enforceEnv) {
+        switch ($enforceEnv) {
+            "0" { $script:enforceWindowsTrust = $false }
+            "1" { $script:enforceWindowsTrust = $true }
+        }
+    }
+}
+
+function Resolve-RepositoryRoot {
+    $scriptDir = Split-Path -Parent $PSCommandPath
+    $testsDir = Split-Path -Parent $scriptDir
+    return (Split-Path -Parent $testsDir)
+}
+
+function Resolve-RootCaPath {
+    if ($env:WINDOWS_ROOTCA_PATH) {
+        return $env:WINDOWS_ROOTCA_PATH
+    }
+
+    $repoRoot = Resolve-RepositoryRoot
+    if (-not $repoRoot) {
+        return $null
+    }
+
+    $defaultCer = Join-Path $repoRoot "docker\ssl\rootCA.cer"
+    if (Test-Path $defaultCer) {
+        return $defaultCer
+    }
+
+    return $null
+}
+
 function Test-CertificateInStore {
     param(
         [string]$StoreName,
         [string]$StoreLocation,
         [string]$Subject
     )
-    
+
+    $result = [PSCustomObject]@{
+        Found = $false
+        Count = 0
+        Error = $null
+    }
+
     try {
-        $store = New-Object System.Security.Cryptography.X509Certificates.X509Store($StoreName, $StoreLocation)
-        $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
-        
-        $certificates = $store.Certificates | Where-Object { $_.Subject -like "*$Subject*" }
-        $store.Close()
-        
-        return $certificates.Count -gt 0, $certificates.Count
-    } catch {
-        return $false, 0
-    }
-}
-
-# Check for mkcert root CA in Windows certificate store
-$mkcertSubjects = @("mkcert", "mkcert development CA", "mkcert root CA")
-$foundMkcertCA = $false
-$mkcertDetails = ""
-
-foreach ($subject in $mkcertSubjects) {
-    $found, $count = Test-CertificateInStore "Root" "LocalMachine" $subject
-    if ($found) {
-        $foundMkcertCA = $true
-        $mkcertDetails = "$subject ($count certificates)"
-        break
-    }
-    
-    # Also check CurrentUser store
-    $found, $count = Test-CertificateInStore "Root" "CurrentUser" $subject
-    if ($found) {
-        $foundMkcertCA = $true
-        $mkcertDetails = "$subject in CurrentUser store ($count certificates)"
-        break
-    }
-}
-
-if ($foundMkcertCA) {
-    Write-Output "PASS|windows_rootca|mkcert root CA found in Windows certificate store: $mkcertDetails|Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*mkcert*'"
-} else {
-    Write-Output "FAIL|windows_rootca|mkcert root CA not found in Windows certificate store|Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*mkcert*'"
-}
-
-# Check for specific domain certificate in Personal store
-$found, $count = Test-CertificateInStore "My" "LocalMachine" $domain
-if ($found) {
-    Write-Output "PASS|windows_rootca|Domain certificate found in Windows Personal store: $domain ($count certificates)|Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -like '*$domain*'"
-} else {
-    # Check CurrentUser Personal store
-    $found, $count = Test-CertificateInStore "My" "CurrentUser" $domain
-    if ($found) {
-        Write-Output "INFO|windows_rootca|Domain certificate found in CurrentUser Personal store: $domain ($count certificates)|Get-ChildItem Cert:\CurrentUser\My | Where-Object Subject -like '*$domain*'"
-    } else {
-        Write-Output "INFO|windows_rootca|Domain certificate not found in Windows certificate stores: $domain|Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -like '*$domain*'"
-    }
-}
-
-# Test SSL validation for the domain
-try {
-    $url = "https://$domain"
-    $request = [System.Net.WebRequest]::Create($url)
-    $request.Timeout = 5000
-    
-    # This will throw an exception if SSL validation fails
-    $response = $request.GetResponse()
-    $statusCode = [int]$response.StatusCode
-    $response.Close()
-    
-    Write-Output "PASS|windows_rootca|SSL validation successful for $url (HTTP $statusCode)|Invoke-WebRequest -Uri $url"
-} catch [System.Net.WebException] {
-    $exception = $_.Exception
-    if ($exception.Message -like "*SSL*" -or $exception.Message -like "*certificate*" -or $exception.Message -like "*trust*") {
-        Write-Output "FAIL|windows_rootca|SSL validation failed for $url - certificate not trusted: $($exception.Message)|Invoke-WebRequest -Uri $url"
-    } else {
-        Write-Output "INFO|windows_rootca|Connection failed for $url (may be service unavailable): $($exception.Message)|Invoke-WebRequest -Uri $url"
-    }
-} catch {
-    Write-Output "INFO|windows_rootca|SSL test failed for $url: $($_.Exception.Message)|Invoke-WebRequest -Uri $url"
-}
-
-# Check if mkcert command is available on Windows
-try {
-    $mkcertVersion = & mkcert -version 2>$null
-    if ($mkcertVersion) {
-        Write-Output "PASS|windows_rootca|mkcert tool available on Windows: $mkcertVersion|mkcert -version"
-        
-        # Check mkcert CAROOT
+        $store = [System.Security.Cryptography.X509Certificates.X509Store]::new($StoreName, $StoreLocation)
         try {
-            $caroot = & mkcert -CAROOT 2>$null
-            if ($caroot -and (Test-Path $caroot)) {
-                Write-Output "PASS|windows_rootca|mkcert CAROOT configured: $caroot|mkcert -CAROOT"
-                
-                # Check if rootCA files exist in CAROOT
-                $rootCAPem = Join-Path $caroot "rootCA.pem"
-                $rootCAKey = Join-Path $caroot "rootCA-key.pem"
-                
-                if ((Test-Path $rootCAPem) -and (Test-Path $rootCAKey)) {
-                    Write-Output "PASS|windows_rootca|mkcert root CA files exist in CAROOT|ls `"$caroot`""
-                } else {
-                    Write-Output "FAIL|windows_rootca|mkcert root CA files missing from CAROOT: $caroot|ls `"$caroot`""
-                }
-            } else {
-                Write-Output "FAIL|windows_rootca|mkcert CAROOT not configured or inaccessible: $caroot|mkcert -CAROOT"
+            $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+            $matches = $store.Certificates | Where-Object { $_.Subject -like "*$Subject*" }
+            if ($matches) {
+                $result.Found = $matches.Count -gt 0
+                $result.Count = $matches.Count
             }
-        } catch {
-            Write-Output "FAIL|windows_rootca|Cannot get mkcert CAROOT: $($_.Exception.Message)|mkcert -CAROOT"
-        }
-    } else {
-        Write-Output "INFO|windows_rootca|mkcert command available but version check failed|mkcert -version"
-    }
-} catch {
-    Write-Output "FAIL|windows_rootca|mkcert tool not available on Windows PATH|where mkcert"
-}
-
-# Check Windows certificate store permissions
-try {
-    $store = New-Object System.Security.Cryptography.X509Certificates.X509Store("Root", "LocalMachine")
-    $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
-    $certCount = $store.Certificates.Count
-    $store.Close()
-    
-    Write-Output "INFO|windows_rootca|Windows Root certificate store accessible: $certCount certificates|Get-ChildItem Cert:\LocalMachine\Root | Measure-Object"
-} catch {
-    Write-Output "FAIL|windows_rootca|Cannot access Windows Root certificate store: $($_.Exception.Message)|Get-ChildItem Cert:\LocalMachine\Root"
-}
-
-# Test certificate validation for subdomains
-$subdomains = @("rag", "lobechat", "vector", "monitor")
-foreach ($subdomain in $subdomains) {
-    $subdomainUrl = "https://$subdomain.$domain"
-    
-    try {
-        # Use .NET WebRequest for certificate validation
-        $request = [System.Net.WebRequest]::Create($subdomainUrl)
-        $request.Timeout = 3000
-        $response = $request.GetResponse()
-        $statusCode = [int]$response.StatusCode
-        $response.Close()
-        
-        Write-Output "PASS|windows_rootca|Subdomain SSL validation successful: $subdomainUrl (HTTP $statusCode)|Invoke-WebRequest -Uri $subdomainUrl"
-    } catch [System.Net.WebException] {
-        $exception = $_.Exception
-        if ($exception.Message -like "*SSL*" -or $exception.Message -like "*certificate*") {
-            Write-Output "FAIL|windows_rootca|Subdomain SSL validation failed: $subdomainUrl - $($exception.Message)|Invoke-WebRequest -Uri $subdomainUrl"
-        } else {
-            Write-Output "INFO|windows_rootca|Subdomain connection failed: $subdomainUrl (may be service unavailable)|Invoke-WebRequest -Uri $subdomainUrl"
+        } finally {
+            $store.Close()
         }
     } catch {
-        Write-Output "INFO|windows_rootca|Subdomain SSL test error: $subdomainUrl - $($_.Exception.Message)|Invoke-WebRequest -Uri $subdomainUrl"
+        $result.Error = $_.Exception.Message
     }
+
+    return $result
+}
+
+function Test-CertificateByThumbprint {
+    param(
+        [string]$StoreName,
+        [string]$StoreLocation,
+        [string]$Thumbprint
+    )
+
+    $normalizedThumbprint = $Thumbprint -replace "\s", ""
+    $normalizedThumbprint = $normalizedThumbprint.ToUpperInvariant()
+
+    $result = [PSCustomObject]@{
+        Found = $false
+        Count = 0
+        Error = $null
+    }
+
+    try {
+        $store = [System.Security.Cryptography.X509Certificates.X509Store]::new($StoreName, $StoreLocation)
+        try {
+            $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+            $matches = $store.Certificates | Where-Object { ($_.Thumbprint -replace "\s", "").ToUpperInvariant() -eq $normalizedThumbprint }
+            if ($matches) {
+                $result.Found = $matches.Count -gt 0
+                $result.Count = $matches.Count
+            }
+        } finally {
+            $store.Close()
+        }
+    } catch {
+        $result.Error = $_.Exception.Message
+    }
+
+    return $result
+}
+
+function Test-SslEndpoint {
+    param(
+        [string]$Url,
+        [string]$Label
+    )
+
+    try {
+        $request = [System.Net.WebRequest]::Create($Url)
+        $request.Timeout = 5000
+        $response = $request.GetResponse()
+        $statusCode = 0
+        if ($response -is [System.Net.HttpWebResponse]) {
+            $statusCode = [int]$response.StatusCode
+        }
+        $response.Close()
+        Publish "PASS" "$Label SSL validation successful for $Url (HTTP $statusCode)" "Invoke-WebRequest -Uri $Url"
+    } catch [System.Net.WebException] {
+        $message = $_.Exception.Message
+        if ($message -match "SSL" -or $message -match "certificate" -or $message -match "trust") {
+            Publish "FAIL" "$Label SSL validation failed for $Url`: $message" "Invoke-WebRequest -Uri $Url"
+        } else {
+            Publish "INFO" "$Label connection failed for $Url`: $message" "Invoke-WebRequest -Uri $Url"
+        }
+    } catch {
+        $message = $_.Exception.Message
+        Publish "INFO" "$Label SSL test error for $Url`: $message" "Invoke-WebRequest -Uri $Url"
+    }
+}
+
+try {
+    Configure-Enforcement
+
+    $domain = $env:PUBLISH_DOMAIN
+    if ([string]::IsNullOrWhiteSpace($domain)) {
+        $domain = "dev.localhost"
+    }
+
+    $fromWsl = [bool]($env:WSL_DISTRO_NAME -or $env:WSLENV)
+    if ($fromWsl) {
+        Publish "INFO" "Running from WSL2 environment: $($env:WSL_DISTRO_NAME)" "echo `$WSL_DISTRO_NAME"
+    } else {
+        Publish "INFO" "Running directly on Windows host: $env:COMPUTERNAME" "echo `$env:COMPUTERNAME"
+    }
+
+    $expectedImportCommand = "sudo Import-Certificate -FilePath rootCA.cer -CertStoreLocation Cert:\LocalMachine\Root"
+
+    $rootCaPath = Resolve-RootCaPath
+    if (-not $rootCaPath) {
+        Publish "BROKEN" "rootCA certificate file not found. Ensure rootCA.cer exists under docker\ssl and import it." $expectedImportCommand
+        return
+    }
+
+    if (-not (Test-Path $rootCaPath)) {
+        Publish "BROKEN" "root CA certificate file missing at $rootCaPath" $expectedImportCommand
+        return
+    }
+
+    try {
+        Add-Type -AssemblyName System.Security
+    } catch {
+        Publish "BROKEN" "System.Security assembly unavailable: $($_.Exception.Message)" "Add-Type -AssemblyName System.Security"
+        return
+    }
+
+    try {
+        $rootCaCert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($rootCaPath)
+    } catch {
+        Publish "BROKEN" "Unable to load root CA certificate from $rootCaPath: $($_.Exception.Message)" $expectedImportCommand
+        return
+    }
+
+    $rootCaThumbprint = ($rootCaCert.Thumbprint -replace "\s", "").ToUpperInvariant()
+    $rootCaSubject = $rootCaCert.Subject
+    Publish "INFO" "Loaded root CA certificate: $rootCaSubject (Thumbprint $rootCaThumbprint)" "Get-ChildItem '$rootCaPath'"
+
+    try {
+        $storeProbe = [System.Security.Cryptography.X509Certificates.X509Store]::new("Root", "LocalMachine")
+        $storeProbe.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+        $storeProbe.Close()
+    } catch {
+        Publish "BROKEN" "Windows certificate store not accessible: $($_.Exception.Message)" "New-Object System.Security.Cryptography.X509Certificates.X509Store"
+        return
+    }
+
+    $localRootResult = Test-CertificateByThumbprint -StoreName "Root" -StoreLocation "LocalMachine" -Thumbprint $rootCaThumbprint
+    if ($localRootResult.Error) {
+        Publish "BROKEN" "Error inspecting LocalMachine root store: $($localRootResult.Error)" $expectedImportCommand
+    } elseif ($localRootResult.Found) {
+        Publish "PASS" "rootCA certificate present in LocalMachine Root store (matches rootCA.cer)" $expectedImportCommand
+    } else {
+        $userRootResult = Test-CertificateByThumbprint -StoreName "Root" -StoreLocation "CurrentUser" -Thumbprint $rootCaThumbprint
+        if ($userRootResult.Error) {
+            Publish "BROKEN" "Error inspecting CurrentUser root store: $($userRootResult.Error)" $expectedImportCommand
+        } elseif ($userRootResult.Found) {
+            Publish "FAIL" "rootCA certificate installed in CurrentUser Root store; re-run import with elevated PowerShell" $expectedImportCommand
+        } else {
+            Publish "FAIL" "rootCA certificate not installed in Windows Root store. Run the import command in elevated PowerShell." $expectedImportCommand
+        }
+    }
+
+    $domainResult = Test-CertificateInStore -StoreName "My" -StoreLocation "LocalMachine" -Subject $domain
+    if ($domainResult.Error) {
+        Publish "INFO" "Error inspecting LocalMachine personal store for '$domain': $($domainResult.Error)" "Get-ChildItem Cert:\LocalMachine\My"
+    } elseif ($domainResult.Found) {
+        Publish "PASS" "Domain certificate found in Windows Personal store: $domain ($($domainResult.Count) certificates)" "Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -like '*$domain*'"
+    } else {
+        $userDomainResult = Test-CertificateInStore -StoreName "My" -StoreLocation "CurrentUser" -Subject $domain
+        if ($userDomainResult.Error) {
+            Publish "INFO" "Error inspecting CurrentUser personal store for '$domain': $($userDomainResult.Error)" "Get-ChildItem Cert:\CurrentUser\My"
+        } elseif ($userDomainResult.Found) {
+            Publish "INFO" "Domain certificate found in CurrentUser Personal store: $domain ($($userDomainResult.Count) certificates)" "Get-ChildItem Cert:\CurrentUser\My | Where-Object Subject -like '*$domain*'"
+        } else {
+            Publish "INFO" "Domain certificate not found in Windows certificate stores: $domain" "Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -like '*$domain*'"
+        }
+    }
+
+    Test-SslEndpoint -Url "https://$domain" -Label "Primary domain"
+
+    $subdomains = @("rag", "lobechat", "vector", "monitor")
+    foreach ($subdomain in $subdomains) {
+        $subUrl = "https://$subdomain.$domain"
+        Test-SslEndpoint -Url $subUrl -Label "Subdomain"
+    }
+
+    try {
+        $mkcertVersion = & mkcert -version 2>$null
+        if ($mkcertVersion) {
+            Publish "PASS" "mkcert tool available on Windows: $mkcertVersion" "mkcert -version"
+
+            try {
+                $caroot = & mkcert -CAROOT 2>$null
+                if ($caroot -and (Test-Path $caroot)) {
+                    Publish "PASS" "mkcert CAROOT configured: $caroot" "mkcert -CAROOT"
+
+                    $rootCaPem = Join-Path $caroot "rootCA.pem"
+                    $rootCaKey = Join-Path $caroot "rootCA-key.pem"
+                    if ((Test-Path $rootCaPem) -and (Test-Path $rootCaKey)) {
+                        Publish "PASS" "mkcert root CA files exist in CAROOT" "ls `"$caroot`""
+                    } else {
+                        Publish "FAIL" "mkcert root CA files missing in CAROOT: $caroot" "ls `"$caroot`""
+                    }
+                } else {
+                    Publish "FAIL" "mkcert CAROOT not configured or inaccessible" "mkcert -CAROOT"
+                }
+            } catch {
+                Publish "FAIL" "Cannot determine mkcert CAROOT: $($_.Exception.Message)" "mkcert -CAROOT"
+            }
+        } else {
+            Publish "INFO" "mkcert command available but version detection returned no output" "mkcert -version"
+        }
+    } catch {
+        Publish "FAIL" "mkcert tool not available on Windows PATH" "where mkcert"
+    }
+
+    try {
+        $store = [System.Security.Cryptography.X509Certificates.X509Store]::new("Root", "LocalMachine")
+        $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+        $certCount = $store.Certificates.Count
+        $store.Close()
+        Publish "INFO" "Windows Root certificate store accessible: $certCount certificates" "Get-ChildItem Cert:\LocalMachine\Root | Measure-Object"
+    } catch {
+        Publish "FAIL" "Cannot access Windows Root certificate store: $($_.Exception.Message)" "Get-ChildItem Cert:\LocalMachine\Root"
+    }
+
+} catch {
+    Publish "BROKEN" "Unexpected PowerShell error: $($_.Exception.Message)" "wsl2-windows-rootca.ps1"
 }

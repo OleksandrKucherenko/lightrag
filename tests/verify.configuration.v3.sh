@@ -46,6 +46,38 @@ log_section() {
   printf "\n%s=== %s ===%s\n" "${COLOR_BLUE}" "$1" "${COLOR_RESET}"
 }
 
+# Helper function to copy script to Windows temp folder and return Windows path
+copy_to_windows_temp() {
+  local script_path="$1"
+  local script_name
+  script_name=$(basename "$script_path")
+  
+  # Get Windows temp directory
+  local windows_temp
+  if ! windows_temp=$(cmd.exe /c "echo %TEMP%" 2>/dev/null | tr -d '\r'); then
+    echo "ERROR: Cannot get Windows temp directory" >&2
+    return 1
+  fi
+  
+  # Convert to WSL path for copying
+  local wsl_temp_path
+  if ! wsl_temp_path=$(wslpath "$windows_temp" 2>/dev/null); then
+    echo "ERROR: Cannot convert Windows temp path to WSL path" >&2
+    return 1
+  fi
+  
+  # Copy script to Windows temp folder
+  local temp_script_path="${wsl_temp_path}/${script_name}"
+  if ! cp "$script_path" "$temp_script_path" 2>/dev/null; then
+    echo "ERROR: Cannot copy script to Windows temp folder" >&2
+    return 1
+  fi
+  
+  # Return Windows path to the copied script
+  echo "${windows_temp}\\${script_name}"
+  return 0
+}
+
 # Timeout wrapper function
 run_with_timeout() {
   local timeout_duration="$1"
@@ -268,9 +300,9 @@ run_powershell_script() {
     return 1
   fi
   
-  # Convert WSL path to Windows path
+  # Copy script to Windows temp folder to avoid UNC path issues
   local windows_path
-  if windows_path=$(wslpath -w "$script_path" 2>/dev/null); then
+  if windows_path=$(copy_to_windows_temp "$script_path"); then
     # Run PowerShell script with timeout and parse output
     local output
     if output=$(run_with_timeout "$CHECK_TIMEOUT" "$script_name" powershell.exe -ExecutionPolicy Bypass -File "$windows_path"); then
@@ -315,8 +347,14 @@ run_powershell_script() {
         return 1
       fi
     fi
+    
+    # Cleanup: Remove temporary script file
+    local wsl_temp_path
+    if wsl_temp_path=$(wslpath "$(dirname "$windows_path")" 2>/dev/null); then
+      rm -f "${wsl_temp_path}/$(basename "$windows_path")" 2>/dev/null || true
+    fi
   else
-    format_result "BROKEN" "$script_name" "Cannot convert WSL path to Windows path" "wslpath -w $script_path"
+    format_result "BROKEN" "$script_name" "Cannot copy PowerShell script to Windows temp folder" "copy_to_windows_temp $script_path"
     return 1
   fi
 }
@@ -345,9 +383,9 @@ run_cmd_script() {
     return 1
   fi
   
-  # Convert WSL path to Windows path
+  # Copy script to Windows temp folder to avoid UNC path issues
   local windows_path
-  if windows_path=$(wslpath -w "$script_path" 2>/dev/null); then
+  if windows_path=$(copy_to_windows_temp "$script_path"); then
     # Run CMD script with timeout and parse output
     local output
     if output=$(run_with_timeout "$CHECK_TIMEOUT" "$script_name" cmd.exe /c "$windows_path"); then
@@ -392,8 +430,14 @@ run_cmd_script() {
         return 1
       fi
     fi
+    
+    # Cleanup: Remove temporary script file
+    local wsl_temp_path
+    if wsl_temp_path=$(wslpath "$(dirname "$windows_path")" 2>/dev/null); then
+      rm -f "${wsl_temp_path}/$(basename "$windows_path")" 2>/dev/null || true
+    fi
   else
-    format_result "BROKEN" "$script_name" "Cannot convert WSL path to Windows path" "wslpath -w $script_path"
+    format_result "BROKEN" "$script_name" "Cannot copy CMD script to Windows temp folder" "copy_to_windows_temp $script_path"
     return 1
   fi
 }
@@ -496,7 +540,7 @@ case "${1:-}" in
     printf "  CHECK_TIMEOUT  Timeout for individual checks in seconds (default: %d)\n" "$CHECK_TIMEOUT"
     printf "\nEnvironment:\n"
     printf "  PUBLISH_DOMAIN Domain for external endpoints (default: dev.localhost)\n"
-    printf "\nCheck Scripts Location: %s\n" "$CHECKS_DIR"
+    printf "\nCheck Scripts Location: %s (searches recursively in subdirectories)\n" "$CHECKS_DIR"
     exit 0
     ;;
   --list)
@@ -504,11 +548,11 @@ case "${1:-}" in
     if [[ -d "$CHECKS_DIR" ]]; then
       # Group by pattern
       for group in security storage communication environment monitoring performance wsl2; do
-        local group_name="${GROUP_NAMES[$group]:-$group}"
-        local scripts=()
+        group_name="${GROUP_NAMES[$group]:-$group}"
+        scripts=()
         while IFS= read -r -d '' script; do
-          local script_name=$(basename "$script")
-          scripts+=("$script_name")
+          relative_path="${script#$CHECKS_DIR/}"
+          scripts+=("$relative_path")
         done < <(find "$CHECKS_DIR" \( -name "${group}-*.sh" -o -name "${group}-*.ps1" -o -name "${group}-*.cmd" -o -name "${group}-*.bat" \) -type f -print0 2>/dev/null | sort -z)
         
         if [[ ${#scripts[@]} -gt 0 ]]; then

@@ -27,7 +27,7 @@ test_ssl_endpoint() {
     fi
     
     # Test HTTPS connectivity
-    if http_code=$(curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 10 "$url" 2>/dev/null); then
+    if http_code=$(curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 8 "$url" 2>/dev/null); then
         case "$http_code" in
             200|301|302)
                 echo "PASS|ssl_endpoints|HTTPS accessible: $url (HTTP $http_code)|curl -I -k $url"
@@ -55,8 +55,8 @@ get_cert_info() {
         hostname="$PUBLISH_DOMAIN"
     fi
     
-    # Get certificate information
-    if cert_info=$(echo | openssl s_client -servername "$hostname" -connect "$hostname:443" 2>/dev/null | openssl x509 -text -noout 2>/dev/null); then
+    # Get certificate information with timeout
+    if cert_info=$(timeout 10 bash -c "echo | openssl s_client -servername '$hostname' -connect '$hostname:443' 2>/dev/null | openssl x509 -text -noout 2>/dev/null"); then
         # Extract subject and issuer
         subject=$(echo "$cert_info" | grep -E "Subject:" | head -1 | sed 's/.*Subject: //')
         issuer=$(echo "$cert_info" | grep -E "Issuer:" | head -1 | sed 's/.*Issuer: //')

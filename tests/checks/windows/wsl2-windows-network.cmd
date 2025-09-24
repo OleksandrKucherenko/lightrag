@@ -9,23 +9,23 @@ REM WHEN: We test network connectivity between WSL2 and Windows
 REM THEN: We verify network integration is working properly
 REM =============================================================================
 
-REM Change to a safe directory to avoid UNC path issues
-cd /d %TEMP% 2>nul || cd /d C:\
+REM Change to Windows temp directory to avoid UNC path issues
+cd /d %TEMP% >nul 2>&1 || cd /d C:\
 
-REM Check if we can resolve Windows hostname from WSL2
-ping -n 1 %COMPUTERNAME% >nul 2>&1
+REM Check if we can resolve Windows hostname from WSL2 (with timeout)
+ping -n 1 -w 2000 %COMPUTERNAME% >nul 2>&1
 if %errorlevel% equ 0 (
-    echo PASS^|windows_network^|Can resolve Windows hostname from WSL2: %COMPUTERNAME%^|ping %COMPUTERNAME%
+    echo PASS^|windows_network^|Can resolve Windows hostname from WSL2: %COMPUTERNAME%^|ping -w 2000 %COMPUTERNAME%
 ) else (
-    echo FAIL^|windows_network^|Cannot resolve Windows hostname from WSL2: %COMPUTERNAME%^|ping %COMPUTERNAME%
+    echo FAIL^|windows_network^|Cannot resolve Windows hostname from WSL2: %COMPUTERNAME%^|ping -w 2000 %COMPUTERNAME%
 )
 
-REM Check Windows localhost accessibility
-ping -n 1 127.0.0.1 >nul 2>&1
+REM Check Windows localhost accessibility (with timeout)
+ping -n 1 -w 1000 127.0.0.1 >nul 2>&1
 if %errorlevel% equ 0 (
-    echo PASS^|windows_network^|Windows localhost accessible^|ping 127.0.0.1
+    echo PASS^|windows_network^|Windows localhost accessible^|ping -w 1000 127.0.0.1
 ) else (
-    echo FAIL^|windows_network^|Windows localhost not accessible^|ping 127.0.0.1
+    echo FAIL^|windows_network^|Windows localhost not accessible^|ping -w 1000 127.0.0.1
 )
 
 REM Check if Windows firewall allows WSL2 connections
@@ -48,37 +48,37 @@ REM Test subdomain resolution from Windows
 set DOMAIN=%PUBLISH_DOMAIN%
 if "%DOMAIN%"=="" set DOMAIN=dev.localhost
 
-REM Test main domain resolution
-nslookup %DOMAIN% >nul 2>&1
+REM Test main domain resolution via ping (works with hosts file)
+ping -n 1 -w 2000 %DOMAIN% >nul 2>&1
 if %errorlevel% equ 0 (
-    echo PASS^|windows_subdomain^|Main domain resolves from Windows: %DOMAIN%^|nslookup %DOMAIN%
+    echo PASS^|windows_subdomain^|Main domain resolves from Windows: %DOMAIN%^|ping -n 1 %DOMAIN%
 ) else (
-    echo FAIL^|windows_subdomain^|Main domain resolution failed from Windows: %DOMAIN%^|nslookup %DOMAIN%
+    echo FAIL^|windows_subdomain^|Main domain resolution failed from Windows: %DOMAIN%^|ping -n 1 %DOMAIN%
 )
 
-REM Test subdomain resolution
-nslookup rag.%DOMAIN% >nul 2>&1
+REM Test subdomain resolution via ping (works with hosts file)
+ping -n 1 -w 2000 rag.%DOMAIN% >nul 2>&1
 if %errorlevel% equ 0 (
-    echo PASS^|windows_subdomain^|LightRAG subdomain resolves from Windows: rag.%DOMAIN%^|nslookup rag.%DOMAIN%
+    echo PASS^|windows_subdomain^|LightRAG subdomain resolves from Windows: rag.%DOMAIN%^|ping -n 1 rag.%DOMAIN%
 ) else (
-    echo FAIL^|windows_subdomain^|LightRAG subdomain resolution failed from Windows: rag.%DOMAIN%^|nslookup rag.%DOMAIN%
+    echo FAIL^|windows_subdomain^|LightRAG subdomain resolution failed from Windows: rag.%DOMAIN%^|ping -n 1 rag.%DOMAIN%
 )
 
-nslookup lobechat.%DOMAIN% >nul 2>&1
+ping -n 1 -w 2000 lobechat.%DOMAIN% >nul 2>&1
 if %errorlevel% equ 0 (
-    echo PASS^|windows_subdomain^|LobeChat subdomain resolves from Windows: lobechat.%DOMAIN%^|nslookup lobechat.%DOMAIN%
+    echo PASS^|windows_subdomain^|LobeChat subdomain resolves from Windows: lobechat.%DOMAIN%^|ping -n 1 lobechat.%DOMAIN%
 ) else (
-    echo FAIL^|windows_subdomain^|LobeChat subdomain resolution failed from Windows: lobechat.%DOMAIN%^|nslookup lobechat.%DOMAIN%
+    echo FAIL^|windows_subdomain^|LobeChat subdomain resolution failed from Windows: lobechat.%DOMAIN%^|ping -n 1 lobechat.%DOMAIN%
 )
 
-REM Test subdomain connectivity with curl (if available)
+REM Test subdomain connectivity with curl (if available, with short timeout)
 where curl >nul 2>&1
 if %errorlevel% equ 0 (
-    curl -I -s -k --connect-timeout 3 https://rag.%DOMAIN% >nul 2>&1
+    timeout 8 curl -I -s -k --connect-timeout 2 --max-time 5 https://rag.%DOMAIN% >nul 2>&1
     if %errorlevel% equ 0 (
-        echo PASS^|windows_subdomain^|LightRAG subdomain accessible from Windows: https://rag.%DOMAIN%^|curl -I https://rag.%DOMAIN%
+        echo PASS^|windows_subdomain^|LightRAG subdomain accessible from Windows: https://rag.%DOMAIN%^|curl -I --connect-timeout 2 https://rag.%DOMAIN%
     ) else (
-        echo FAIL^|windows_subdomain^|LightRAG subdomain not accessible from Windows: https://rag.%DOMAIN%^|curl -I https://rag.%DOMAIN%
+        echo FAIL^|windows_subdomain^|LightRAG subdomain not accessible from Windows: https://rag.%DOMAIN%^|curl -I --connect-timeout 2 https://rag.%DOMAIN%
     )
 ) else (
     echo INFO^|windows_subdomain^|curl not available for connectivity testing^|where curl

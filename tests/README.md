@@ -125,6 +125,8 @@ All check scripts follow the naming pattern:
 - **`wsl2-windows-docker.ps1`** - Docker Desktop integration (PowerShell)
 - **`wsl2-windows-network.cmd`** - Network connectivity (CMD)
 - **`wsl2-subdomain-integration.ps1`** - Subdomain routing (PowerShell)
+- **`wsl2-windows-rootca.ps1`** - Windows root CA certificate validation (PowerShell)
+- **`wsl2-rootca-integration.sh`** - Root CA integration between WSL2 and Windows (Bash)
 
 ## 🔧 Adding New Checks
 

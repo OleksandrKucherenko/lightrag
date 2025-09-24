@@ -26,6 +26,8 @@ wsl2-windows-docker.ps1          # Windows Docker integration (PowerShell)
 wsl2-windows-network.cmd         # Windows network integration (CMD)
 wsl2-subdomain-integration.ps1   # Subdomain routing integration (PowerShell)
 wsl2-system-integration.sh       # WSL2 system integration (Bash)
+wsl2-windows-rootca.ps1          # Windows root CA certificate validation (PowerShell)
+wsl2-rootca-integration.sh       # Root CA integration between WSL2 and Windows (Bash)
 ```
 
 ## Standard Output Format
@@ -58,6 +60,8 @@ The orchestrator automatically discovers and groups checks by their filename pre
   - Network connectivity between WSL2 and Windows
   - Subdomain routing and DNS resolution
   - SSL certificate validation for subdomains
+  - Root CA certificate registration on Windows host
+  - Cross-platform certificate trust validation
 
 ## Adding New Checks
 

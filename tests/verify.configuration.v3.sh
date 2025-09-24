@@ -35,12 +35,75 @@ PASSED_CHECKS=0
 INFO_CHECKS=0
 FAILED_CHECKS=0
 
+# Timeout configuration
+CHECK_TIMEOUT="${CHECK_TIMEOUT:-30}"  # Timeout in seconds for each individual check (can be overridden via environment)
+
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
 
 log_section() {
   printf "\n%s=== %s ===%s\n" "${COLOR_BLUE}" "$1" "${COLOR_RESET}"
+}
+
+# Timeout wrapper function
+run_with_timeout() {
+  local timeout_duration="$1"
+  shift
+  local script_name="$1"
+  shift
+  
+  # Create a temporary file for the output
+  local temp_output
+  temp_output=$(mktemp)
+  local temp_status
+  temp_status=$(mktemp)
+  
+  # Run command in background with timeout
+  (
+    "$@" > "$temp_output" 2>&1
+    echo $? > "$temp_status"
+  ) &
+  
+  local pid=$!
+  local timeout_occurred=false
+  
+  # Wait for completion or timeout
+  local count=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if [[ $count -ge $timeout_duration ]]; then
+      timeout_occurred=true
+      kill -TERM "$pid" 2>/dev/null
+      sleep 1
+      kill -KILL "$pid" 2>/dev/null
+      break
+    fi
+    sleep 1
+    ((count++))
+  done
+  
+  # Wait for process to finish
+  wait "$pid" 2>/dev/null || true
+  
+  # Handle timeout
+  if [[ "$timeout_occurred" == true ]]; then
+    echo "BROKEN|${script_name}_timeout|Check timed out after ${timeout_duration} seconds|timeout ${timeout_duration}s $*"
+    rm -f "$temp_output" "$temp_status"
+    return 1
+  fi
+  
+  # Get the exit status and output
+  local exit_status=0
+  if [[ -f "$temp_status" ]]; then
+    exit_status=$(cat "$temp_status")
+  fi
+  
+  if [[ -f "$temp_output" ]]; then
+    cat "$temp_output"
+  fi
+  
+  rm -f "$temp_output" "$temp_status"
+  return "$exit_status"
 }
 
 load_env_files() {
@@ -139,9 +202,9 @@ run_bash_script() {
     }
   fi
   
-  # Run the check script and parse output
+  # Run the check script with timeout and parse output
   local output
-  if output=$("$script_path" 2>&1); then
+  if output=$(run_with_timeout "$CHECK_TIMEOUT" "$script_name" "$script_path"); then
     # Parse each line of output (some scripts may output multiple results)
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
@@ -160,8 +223,25 @@ run_bash_script() {
       fi
     done <<< "$output"
   else
-    format_result "BROKEN" "$script_name" "Check script failed to execute: ${output:0:100}" "$script_path"
-    return 1
+    # Check if this was a timeout (output will contain timeout message)
+    if [[ "$output" == *"timed out after"* ]]; then
+      # Parse timeout message and format it
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        if [[ "$line" =~ ^([^|]+)\|([^|]+)\|([^|]+)(\|(.*))?$ ]]; then
+          local status="${BASH_REMATCH[1]}"
+          local check="${BASH_REMATCH[2]}"
+          local message="${BASH_REMATCH[3]}"
+          local command="${BASH_REMATCH[5]:-}"
+          format_result "$status" "$check" "$message" "$command"
+        fi
+      done <<< "$output"
+      # Don't return error for timeout - it's just another check result
+      return 0
+    else
+      format_result "BROKEN" "$script_name" "Check script failed to execute: ${output:0:100}" "$script_path"
+      return 1
+    fi
   fi
 }
 
@@ -191,9 +271,9 @@ run_powershell_script() {
   # Convert WSL path to Windows path
   local windows_path
   if windows_path=$(wslpath -w "$script_path" 2>/dev/null); then
-    # Run PowerShell script and parse output
+    # Run PowerShell script with timeout and parse output
     local output
-    if output=$(powershell.exe -ExecutionPolicy Bypass -File "$windows_path" 2>&1); then
+    if output=$(run_with_timeout "$CHECK_TIMEOUT" "$script_name" powershell.exe -ExecutionPolicy Bypass -File "$windows_path"); then
       # Parse each line of output
       while IFS= read -r line; do
         [[ -z "$line" ]] && continue
@@ -214,8 +294,26 @@ run_powershell_script() {
         fi
       done <<< "$output"
     else
-      format_result "BROKEN" "$script_name" "PowerShell script failed: ${output:0:100}" "powershell.exe -File $windows_path"
-      return 1
+      # Check if this was a timeout (output will contain timeout message)
+      if [[ "$output" == *"timed out after"* ]]; then
+        # Parse timeout message and format it
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          line="${line%$'\r'}"  # Remove Windows line endings
+          if [[ "$line" =~ ^([^|]+)\|([^|]+)\|([^|]+)(\|(.*))?$ ]]; then
+            local status="${BASH_REMATCH[1]}"
+            local check="${BASH_REMATCH[2]}"
+            local message="${BASH_REMATCH[3]}"
+            local command="${BASH_REMATCH[5]:-}"
+            format_result "$status" "$check" "$message" "$command"
+          fi
+        done <<< "$output"
+        # Don't return error for timeout - it's just another check result
+        return 0
+      else
+        format_result "BROKEN" "$script_name" "PowerShell script failed: ${output:0:100}" "powershell.exe -File $windows_path"
+        return 1
+      fi
     fi
   else
     format_result "BROKEN" "$script_name" "Cannot convert WSL path to Windows path" "wslpath -w $script_path"
@@ -250,9 +348,9 @@ run_cmd_script() {
   # Convert WSL path to Windows path
   local windows_path
   if windows_path=$(wslpath -w "$script_path" 2>/dev/null); then
-    # Run CMD script and parse output
+    # Run CMD script with timeout and parse output
     local output
-    if output=$(cmd.exe /c "$windows_path" 2>&1); then
+    if output=$(run_with_timeout "$CHECK_TIMEOUT" "$script_name" cmd.exe /c "$windows_path"); then
       # Parse each line of output
       while IFS= read -r line; do
         [[ -z "$line" ]] && continue
@@ -273,8 +371,26 @@ run_cmd_script() {
         fi
       done <<< "$output"
     else
-      format_result "BROKEN" "$script_name" "CMD script failed: ${output:0:100}" "cmd.exe /c $windows_path"
-      return 1
+      # Check if this was a timeout (output will contain timeout message)
+      if [[ "$output" == *"timed out after"* ]]; then
+        # Parse timeout message and format it
+        while IFS= read -r line; do
+          [[ -z "$line" ]] && continue
+          line="${line%$'\r'}"  # Remove Windows line endings
+          if [[ "$line" =~ ^([^|]+)\|([^|]+)\|([^|]+)(\|(.*))?$ ]]; then
+            local status="${BASH_REMATCH[1]}"
+            local check="${BASH_REMATCH[2]}"
+            local message="${BASH_REMATCH[3]}"
+            local command="${BASH_REMATCH[5]:-}"
+            format_result "$status" "$check" "$message" "$command"
+          fi
+        done <<< "$output"
+        # Don't return error for timeout - it's just another check result
+        return 0
+      else
+        format_result "BROKEN" "$script_name" "CMD script failed: ${output:0:100}" "cmd.exe /c $windows_path"
+        return 1
+      fi
     fi
   else
     format_result "BROKEN" "$script_name" "Cannot convert WSL path to Windows path" "wslpath -w $script_path"
@@ -344,7 +460,7 @@ main() {
   
   # Summary
   log_section "Configuration Summary"
-  printf "Total Checks: %d\n" "$TOTAL_CHECKS"
+  printf "Total Checks: %d (timeout: %ds per check)\n" "$TOTAL_CHECKS" "$CHECK_TIMEOUT"
   printf "%s✓ Passed/Enabled: %d%s\n" "${COLOR_GREEN}" "$PASSED_CHECKS" "${COLOR_RESET}"
   printf "%sℹ Info/Disabled: %d%s\n" "${COLOR_BLUE}" "$INFO_CHECKS" "${COLOR_RESET}"
   printf "%s✗ Failed/Broken: %d%s\n" "${COLOR_RED}" "$FAILED_CHECKS" "${COLOR_RESET}"
@@ -376,6 +492,8 @@ case "${1:-}" in
     printf "\nOptions:\n"
     printf "  --help, -h     Show this help message\n"
     printf "  --list         List available check scripts\n"
+    printf "\nConfiguration:\n"
+    printf "  CHECK_TIMEOUT  Timeout for individual checks in seconds (default: %d)\n" "$CHECK_TIMEOUT"
     printf "\nEnvironment:\n"
     printf "  PUBLISH_DOMAIN Domain for external endpoints (default: dev.localhost)\n"
     printf "\nCheck Scripts Location: %s\n" "$CHECKS_DIR"

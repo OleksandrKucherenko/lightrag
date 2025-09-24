@@ -102,6 +102,8 @@ All check scripts follow the naming pattern:
 - **`security-redis-auth.sh`** - Redis password authentication
 - **`security-qdrant-api.sh`** - Qdrant API key protection
 - **`security-memgraph-auth.sh`** - Memgraph credentials validation
+- **`security-ssl-certificates.sh`** - SSL certificate validation and integrity
+- **`security-caddy-tls-labels.sh`** - Caddy TLS configuration labels verification
 
 ### Storage Analysis
 - **`storage-redis-analysis.sh`** - Redis KV/Document storage validation

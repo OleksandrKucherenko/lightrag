@@ -49,6 +49,11 @@ Where:
 The orchestrator automatically discovers and groups checks by their filename prefix:
 
 - **security-\***: Authentication and authorization checks
+  - Redis password authentication
+  - Qdrant API key protection
+  - Memgraph credentials validation
+  - SSL certificate validation and integrity
+  - Caddy TLS configuration labels verification
 - **storage-\***: Data structure validation and analysis
 - **communication-\***: Service connectivity and API testing
 - **environment-\***: System configuration and setup

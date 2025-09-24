@@ -39,6 +39,7 @@
       - [LobeChat Configuration (.env.lobechat)](#lobechat-configuration-envlobechat)
     - [Configuration Validation](#configuration-validation)
       - [Quick Validation Commands](#quick-validation-commands)
+      - [Test Categories](#test-categories)
   - [📚 Additional Documentation](#-additional-documentation)
     - [Detailed Guides](#detailed-guides)
     - [Deprecated Documentation](#deprecated-documentation)
@@ -614,29 +615,38 @@ DEFAULT_AGENT_CONFIG={"model":"lightrag","systemRole":"AI assistant with graph k
 
 ### Configuration Validation
 
+The solution includes a comprehensive test framework following TDD principles with GIVEN/WHEN/THEN patterns.
+
 #### Quick Validation Commands
 ```bash
-# Test domain configuration
-tests/test.domain.configuration.sh
+# Run all configuration checks
+./tests/verify.configuration.v3.sh
 
-# Verify Docker Compose config
-docker compose config | grep caddy:
+# Run specific category checks
+find tests/checks -name "security-*" -exec {} \;
+find tests/checks -name "environment-*" -exec {} \;
 
-# Test with custom domain
-PUBLISH_DOMAIN=test.local docker compose config | grep caddy:
+# List all available checks
+./tests/verify.configuration.v3.sh --list
 
-# Validate Caddy configuration
-docker run --rm \
-    -v "$(pwd)/docker/etc/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
-    lucaslorentz/caddy-docker-proxy:latest \
-    validate \
-    --config /etc/caddy/Caddyfile
+# Run individual check
+./tests/checks/security-redis-auth.sh
 ```
+
+#### Test Categories
+- **Security**: Authentication and authorization validation
+- **Storage**: Data structure and storage backend analysis  
+- **Communication**: Service connectivity and API endpoint testing
+- **Environment**: System configuration and domain setup
+- **Monitoring**: Health checks and service monitoring
+- **WSL2**: Windows integration testing (PowerShell/CMD/Bash)
+
+For detailed testing documentation, see [tests/README.md](tests/README.md).
 
 ## 📚 Additional Documentation
 
 ### Detailed Guides
-- **[Testing Framework Guide](docs/TESTING.md)**: Comprehensive testing documentation including GIVEN/WHEN/THEN patterns, test categories, and troubleshooting
+- **[Testing Framework Guide](tests/README.md)**: Comprehensive testing documentation including GIVEN/WHEN/THEN patterns, test categories, and troubleshooting
 - **[Performance Monitoring & Benchmarking](docs/performance-monitoring-benchmark.md)**: Detailed performance measurement procedures, monitoring strategies, and validation methodologies
 
 ### Deprecated Documentation

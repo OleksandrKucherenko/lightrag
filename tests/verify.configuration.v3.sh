@@ -93,7 +93,35 @@ format_result() {
   esac
 }
 
+is_wsl2() {
+  [[ -f "/proc/version" ]] && grep -q "microsoft" "/proc/version" 2>/dev/null
+}
+
 run_check_script() {
+  local script_path="$1"
+  local script_name script_ext
+  script_name=$(basename "$script_path")
+  script_ext="${script_name##*.}"
+  
+  # Handle different script types
+  case "$script_ext" in
+    "sh")
+      run_bash_script "$script_path"
+      ;;
+    "ps1")
+      run_powershell_script "$script_path"
+      ;;
+    "cmd"|"bat")
+      run_cmd_script "$script_path"
+      ;;
+    *)
+      format_result "BROKEN" "${script_name%.*}" "Unsupported script type: $script_ext" "file $script_path"
+      return 1
+      ;;
+  esac
+}
+
+run_bash_script() {
   local script_path="$1"
   local script_name
   script_name=$(basename "$script_path" .sh)
@@ -137,17 +165,134 @@ run_check_script() {
   fi
 }
 
+run_powershell_script() {
+  local script_path="$1"
+  local script_name
+  script_name=$(basename "$script_path" .ps1)
+  
+  # Check if we're in WSL2
+  if ! is_wsl2; then
+    format_result "INFO" "$script_name" "PowerShell script skipped - not in WSL2 environment" "uname -r"
+    return 0
+  fi
+  
+  # Check if PowerShell is available
+  if ! command -v powershell.exe >/dev/null 2>&1; then
+    format_result "BROKEN" "$script_name" "PowerShell not available in WSL2" "which powershell.exe"
+    return 1
+  fi
+  
+  # Check if script exists
+  if [[ ! -f "$script_path" ]]; then
+    format_result "BROKEN" "$script_name" "PowerShell script not found" "ls $script_path"
+    return 1
+  fi
+  
+  # Convert WSL path to Windows path
+  local windows_path
+  if windows_path=$(wslpath -w "$script_path" 2>/dev/null); then
+    # Run PowerShell script and parse output
+    local output
+    if output=$(powershell.exe -ExecutionPolicy Bypass -File "$windows_path" 2>&1); then
+      # Parse each line of output
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        # Remove Windows line endings
+        line="${line%$'\r'}"
+        
+        # Parse the standard format: STATUS|CHECK_NAME|MESSAGE|COMMAND
+        if [[ "$line" =~ ^([^|]+)\|([^|]+)\|([^|]+)(\|(.*))?$ ]]; then
+          local status="${BASH_REMATCH[1]}"
+          local check="${BASH_REMATCH[2]}"
+          local message="${BASH_REMATCH[3]}"
+          local command="${BASH_REMATCH[5]:-}"
+          
+          format_result "$status" "$check" "$message" "$command"
+        else
+          # Handle non-standard output
+          format_result "BROKEN" "$script_name" "Invalid output format: $line" "powershell.exe -File $windows_path"
+        fi
+      done <<< "$output"
+    else
+      format_result "BROKEN" "$script_name" "PowerShell script failed: ${output:0:100}" "powershell.exe -File $windows_path"
+      return 1
+    fi
+  else
+    format_result "BROKEN" "$script_name" "Cannot convert WSL path to Windows path" "wslpath -w $script_path"
+    return 1
+  fi
+}
+
+run_cmd_script() {
+  local script_path="$1"
+  local script_name script_ext
+  script_ext="${script_path##*.}"
+  script_name=$(basename "$script_path" ".$script_ext")
+  
+  # Check if we're in WSL2
+  if ! is_wsl2; then
+    format_result "INFO" "$script_name" "CMD script skipped - not in WSL2 environment" "uname -r"
+    return 0
+  fi
+  
+  # Check if cmd.exe is available
+  if ! command -v cmd.exe >/dev/null 2>&1; then
+    format_result "BROKEN" "$script_name" "CMD not available in WSL2" "which cmd.exe"
+    return 1
+  fi
+  
+  # Check if script exists
+  if [[ ! -f "$script_path" ]]; then
+    format_result "BROKEN" "$script_name" "CMD script not found" "ls $script_path"
+    return 1
+  fi
+  
+  # Convert WSL path to Windows path
+  local windows_path
+  if windows_path=$(wslpath -w "$script_path" 2>/dev/null); then
+    # Run CMD script and parse output
+    local output
+    if output=$(cmd.exe /c "$windows_path" 2>&1); then
+      # Parse each line of output
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        # Remove Windows line endings
+        line="${line%$'\r'}"
+        
+        # Parse the standard format: STATUS|CHECK_NAME|MESSAGE|COMMAND
+        if [[ "$line" =~ ^([^|]+)\|([^|]+)\|([^|]+)(\|(.*))?$ ]]; then
+          local status="${BASH_REMATCH[1]}"
+          local check="${BASH_REMATCH[2]}"
+          local message="${BASH_REMATCH[3]}"
+          local command="${BASH_REMATCH[5]:-}"
+          
+          format_result "$status" "$check" "$message" "$command"
+        else
+          # Handle non-standard output
+          format_result "BROKEN" "$script_name" "Invalid output format: $line" "cmd.exe /c $windows_path"
+        fi
+      done <<< "$output"
+    else
+      format_result "BROKEN" "$script_name" "CMD script failed: ${output:0:100}" "cmd.exe /c $windows_path"
+      return 1
+    fi
+  else
+    format_result "BROKEN" "$script_name" "Cannot convert WSL path to Windows path" "wslpath -w $script_path"
+    return 1
+  fi
+}
+
 run_category_checks() {
   local category="$1"
   local pattern="$2"
   
   log_section "$category"
   
-  # Find all scripts matching the pattern
+  # Find all scripts matching the pattern (bash, PowerShell, CMD)
   local scripts=()
   while IFS= read -r -d '' script; do
     scripts+=("$script")
-  done < <(find "$CHECKS_DIR" -name "${pattern}-*.sh" -type f -print0 2>/dev/null | sort -z)
+  done < <(find "$CHECKS_DIR" \( -name "${pattern}-*.sh" -o -name "${pattern}-*.ps1" -o -name "${pattern}-*.cmd" -o -name "${pattern}-*.bat" \) -type f -print0 2>/dev/null | sort -z)
   
   if [[ ${#scripts[@]} -eq 0 ]]; then
     printf "  No checks found for pattern: %s\n" "$pattern"
@@ -167,6 +312,7 @@ declare -A GROUP_NAMES=(
   ["environment"]="Environment Configuration"
   ["monitoring"]="Monitoring & Health"
   ["performance"]="Performance Validation"
+  ["wsl2"]="WSL2 Windows Integration"
 )
 
 # =============================================================================
@@ -194,6 +340,7 @@ main() {
   run_category_checks "${GROUP_NAMES[environment]}" "environment"
   run_category_checks "${GROUP_NAMES[monitoring]}" "monitoring"
   run_category_checks "${GROUP_NAMES[performance]}" "performance"
+  run_category_checks "${GROUP_NAMES[wsl2]}" "wsl2"
   
   # Summary
   log_section "Configuration Summary"
@@ -238,12 +385,13 @@ case "${1:-}" in
     printf "Available check scripts (grouped by pattern):\n\n"
     if [[ -d "$CHECKS_DIR" ]]; then
       # Group by pattern
-      for group in security storage communication environment monitoring performance; do
+      for group in security storage communication environment monitoring performance wsl2; do
         local group_name="${GROUP_NAMES[$group]:-$group}"
         local scripts=()
         while IFS= read -r -d '' script; do
-          scripts+=("$(basename "$script" .sh)")
-        done < <(find "$CHECKS_DIR" -name "${group}-*.sh" -type f -print0 2>/dev/null | sort -z)
+          local script_name=$(basename "$script")
+          scripts+=("$script_name")
+        done < <(find "$CHECKS_DIR" \( -name "${group}-*.sh" -o -name "${group}-*.ps1" -o -name "${group}-*.cmd" -o -name "${group}-*.bat" \) -type f -print0 2>/dev/null | sort -z)
         
         if [[ ${#scripts[@]} -gt 0 ]]; then
           printf "%s:\n" "$group_name"

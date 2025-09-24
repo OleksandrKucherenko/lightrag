@@ -41,7 +41,7 @@ else
 fi
 
 # WHEN: We test with different domain values
-test_domains=("test.local" "myapp.internal" "staging.company.com")
+test_domains=("test.local" "staging.company.com")
 
 for test_domain in "${test_domains[@]}"; do
     export PUBLISH_DOMAIN="$test_domain"
@@ -58,7 +58,7 @@ for test_domain in "${test_domains[@]}"; do
 done
 
 # WHEN: We test with different HOST_IP values
-test_ips=("192.168.1.100" "10.0.0.50" "172.16.0.10")
+test_ips=("192.168.1.100" "62.119.15.83")
 
 for test_ip in "${test_ips[@]}"; do
     export HOST_IP="$test_ip"

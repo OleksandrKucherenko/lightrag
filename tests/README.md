@@ -103,7 +103,15 @@ All check scripts follow the naming pattern:
 - **`security-qdrant-api.sh`** - Qdrant API key protection
 - **`security-memgraph-auth.sh`** - Memgraph credentials validation
 - **`security-ssl-certificates.sh`** - SSL certificate validation and integrity
-- **`security-caddy-tls-labels.sh`** - Caddy TLS configuration labels verification
+- **`security-caddy-proxy-service.sh`** - Proxy service definition and base labels
+- **`security-caddy-url-labels.sh`** - Caddy URL labels for each routed service
+- **`security-caddy-tls-labels.sh`** - TLS label presence and certificate references
+- **`security-caddy-reverse-proxy.sh`** - Reverse proxy label patterns for services
+- **`security-caddy-proxy-cert-volume.sh`** - Certificate volume mount configuration
+- **`security-caddy-proxy-envfile.sh`** - Proxy env_file entries for Caddy configuration
+- **`security-caddy-proxy-network.sh`** - Frontend network attachment for Caddy proxy
+- **`security-caddy-proxy-port-https.sh`** - HTTPS port exposure on the Caddy proxy
+- **`security-caddy-proxy-port-http.sh`** - HTTP port exposure for redirects on the Caddy proxy
 
 ### Storage Analysis
 - **`storage-redis-analysis.sh`** - Redis KV/Document storage validation

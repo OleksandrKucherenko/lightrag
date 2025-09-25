@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 REM =============================================================================
 REM WSL2 Windows Network Integration Check (CMD)
 REM =============================================================================
@@ -7,6 +8,9 @@ REM GIVEN: WSL2 environment with Windows network integration
 REM WHEN: We test network connectivity between WSL2 and Windows
 REM THEN: We verify network integration is working properly
 REM =============================================================================
+
+REM Change to a safe directory to avoid UNC path issues
+cd /d %TEMP% 2>nul || cd /d C:\
 
 REM Check if we can resolve Windows hostname from WSL2
 ping -n 1 %COMPUTERNAME% >nul 2>&1
@@ -79,3 +83,4 @@ if %errorlevel% equ 0 (
 ) else (
     echo INFO^|windows_subdomain^|curl not available for connectivity testing^|where curl
 )
+

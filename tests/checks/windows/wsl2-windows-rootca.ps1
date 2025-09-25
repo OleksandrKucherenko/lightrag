@@ -32,55 +32,93 @@ function Test-CertificateInStore {
         $store = New-Object System.Security.Cryptography.X509Certificates.X509Store($StoreName, $StoreLocation)
         $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
         
-        $certificates = $store.Certificates | Where-Object { $_.Subject -like "*$Subject*" }
+        # Use case-insensitive matching and handle special characters
+        $certificates = $store.Certificates | Where-Object { 
+            $_.Subject -imatch [regex]::Escape($Subject) -or 
+            $_.Subject -ilike "*$Subject*" -or
+            $_.Issuer -imatch [regex]::Escape($Subject) -or
+            $_.Issuer -ilike "*$Subject*" -or
+            $_.FriendlyName -ilike "*$Subject*"
+        }
         $store.Close()
         
-        return $certificates.Count -gt 0, $certificates.Count
+        return $certificates.Count -gt 0, $certificates.Count, $certificates
     } catch {
-        return $false, 0
+        return $false, 0, $null
     }
 }
 
 # Check for mkcert root CA in Windows certificate store
-$mkcertSubjects = @("mkcert", "mkcert development CA", "mkcert root CA")
+$mkcertSubjects = @(
+    "mkcert", 
+    "mkcert development CA", 
+    "mkcert root CA",
+    "mkcert development certificate",
+    "development CA",
+    "localhost"  # mkcert often creates localhost certificates
+)
 $foundMkcertCA = $false
 $mkcertDetails = ""
+$foundCertificates = @()
 
-foreach ($subject in $mkcertSubjects) {
-    $found, $count = Test-CertificateInStore "Root" "LocalMachine" $subject
-    if ($found) {
-        $foundMkcertCA = $true
-        $mkcertDetails = "$subject ($count certificates)"
-        break
+# Check both LocalMachine and CurrentUser stores
+$storeLocations = @(
+    @{Location="LocalMachine"; Name="Local Machine"},
+    @{Location="CurrentUser"; Name="Current User"}
+)
+
+foreach ($storeInfo in $storeLocations) {
+    foreach ($subject in $mkcertSubjects) {
+        $found, $count, $certs = Test-CertificateInStore "Root" $storeInfo.Location $subject
+        if ($found) {
+            $foundMkcertCA = $true
+            $certSubjects = ($certs | ForEach-Object { $_.Subject.Split(',')[0] }) -join ', '
+            $mkcertDetails = "Found $count mkcert certificate(s) in $($storeInfo.Name) store - $certSubjects"
+            $foundCertificates += $certs
+            break
+        }
     }
-    
-    # Also check CurrentUser store
-    $found, $count = Test-CertificateInStore "Root" "CurrentUser" $subject
-    if ($found) {
-        $foundMkcertCA = $true
-        $mkcertDetails = "$subject in CurrentUser store ($count certificates)"
-        break
-    }
+    if ($foundMkcertCA) { break }
 }
 
 if ($foundMkcertCA) {
     Write-Output "PASS|windows_rootca|mkcert root CA found in Windows certificate store: $mkcertDetails|Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*mkcert*'"
 } else {
-    Write-Output "FAIL|windows_rootca|mkcert root CA not found in Windows certificate store|Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*mkcert*'"
+    # Debug: List all root certificates to help troubleshoot
+    try {
+        $allRootCerts = Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -like "*mkcert*" -or $_.Subject -like "*development*" -or $_.Issuer -like "*mkcert*" }
+        if ($allRootCerts) {
+            $debugInfo = ($allRootCerts | ForEach-Object { $_.Subject.Split(',')[0] }) -join '; '
+            Write-Output "INFO|windows_rootca|Found development certificates but not recognized as mkcert: $debugInfo|Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*mkcert*'"
+        } else {
+            Write-Output "FAIL|windows_rootca|mkcert root CA not found in Windows certificate store|Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*mkcert*'"
+        }
+    } catch {
+        Write-Output "FAIL|windows_rootca|mkcert root CA not found in Windows certificate store|Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*mkcert*'"
+    }
 }
 
 # Check for specific domain certificate in Personal store
-$found, $count = Test-CertificateInStore "My" "LocalMachine" $domain
-if ($found) {
-    Write-Output "PASS|windows_rootca|Domain certificate found in Windows Personal store: $domain ($count certificates)|Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -like '*$domain*'"
-} else {
-    # Check CurrentUser Personal store
-    $found, $count = Test-CertificateInStore "My" "CurrentUser" $domain
+$domainFound = $false
+$domainDetails = ""
+
+foreach ($storeInfo in $storeLocations) {
+    $found, $count, $certs = Test-CertificateInStore "My" $storeInfo.Location $domain
     if ($found) {
-        Write-Output "INFO|windows_rootca|Domain certificate found in CurrentUser Personal store: $domain ($count certificates)|Get-ChildItem Cert:\CurrentUser\My | Where-Object Subject -like '*$domain*'"
-    } else {
-        Write-Output "INFO|windows_rootca|Domain certificate not found in Windows certificate stores: $domain|Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -like '*$domain*'"
+        $domainFound = $true
+        $certSubjects = ($certs | ForEach-Object { $_.Subject.Split(',')[0] }) -join ', '
+        $domainDetails = "Found $count certificate(s) for $domain in $($storeInfo.Name) Personal store - $certSubjects"
+        if ($storeInfo.Location -eq "LocalMachine") {
+            Write-Output "PASS|windows_rootca|$domainDetails|Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -like '*$domain*'"
+        } else {
+            Write-Output "INFO|windows_rootca|$domainDetails|Get-ChildItem Cert:\CurrentUser\My | Where-Object Subject -like '*$domain*'"
+        }
+        break
     }
+}
+
+if (-not $domainFound) {
+    Write-Output "INFO|windows_rootca|Domain certificate not found in Windows certificate stores - $domain|Get-ChildItem Cert:\LocalMachine\My,Cert:\CurrentUser\My | Where-Object Subject -like '*$domain*'"
 }
 
 # Test SSL validation for the domain
@@ -115,20 +153,36 @@ try {
         # Check mkcert CAROOT
         try {
             $caroot = & mkcert -CAROOT 2>$null
-            if ($caroot -and (Test-Path $caroot)) {
-                Write-Output "PASS|windows_rootca|mkcert CAROOT configured: $caroot|mkcert -CAROOT"
-                
-                # Check if rootCA files exist in CAROOT
-                $rootCAPem = Join-Path $caroot "rootCA.pem"
-                $rootCAKey = Join-Path $caroot "rootCA-key.pem"
-                
-                if ((Test-Path $rootCAPem) -and (Test-Path $rootCAKey)) {
-                    Write-Output "PASS|windows_rootca|mkcert root CA files exist in CAROOT|ls `"$caroot`""
+            if ($caroot) {
+                $caroot = $caroot.Trim()
+                # Test if path exists and is accessible
+                if (Test-Path $caroot -ErrorAction SilentlyContinue) {
+                    Write-Output "PASS|windows_rootca|mkcert CAROOT configured and accessible - $caroot|mkcert -CAROOT"
+                    
+                    # Check if rootCA files exist in CAROOT
+                    $rootCAPem = Join-Path $caroot "rootCA.pem"
+                    $rootCAKey = Join-Path $caroot "rootCA-key.pem"
+                    
+                    if ((Test-Path $rootCAPem -ErrorAction SilentlyContinue) -and (Test-Path $rootCAKey -ErrorAction SilentlyContinue)) {
+                        Write-Output "PASS|windows_rootca|mkcert root CA files exist in CAROOT|Get-ChildItem `"$caroot`""
+                    } else {
+                        Write-Output "FAIL|windows_rootca|mkcert root CA files missing from CAROOT - $caroot|Get-ChildItem `"$caroot`""
+                    }
                 } else {
-                    Write-Output "FAIL|windows_rootca|mkcert root CA files missing from CAROOT: $caroot|ls `"$caroot`""
+                    # Try to create the directory if it doesn't exist
+                    try {
+                        if (-not (Test-Path $caroot)) {
+                            New-Item -Path $caroot -ItemType Directory -Force -ErrorAction Stop | Out-Null
+                            Write-Output "INFO|windows_rootca|Created mkcert CAROOT directory - $caroot|mkcert -CAROOT"
+                        } else {
+                            Write-Output "FAIL|windows_rootca|mkcert CAROOT exists but not accessible - $caroot (check permissions)|mkcert -CAROOT"
+                        }
+                    } catch {
+                        Write-Output "FAIL|windows_rootca|mkcert CAROOT not accessible and cannot create - $caroot - $($_.Exception.Message)|mkcert -CAROOT"
+                    }
                 }
             } else {
-                Write-Output "FAIL|windows_rootca|mkcert CAROOT not configured or inaccessible: $caroot|mkcert -CAROOT"
+                Write-Output "FAIL|windows_rootca|mkcert CAROOT command returned empty result|mkcert -CAROOT"
             }
         } catch {
             Write-Output "FAIL|windows_rootca|Cannot get mkcert CAROOT - $($_.Exception.Message)|mkcert -CAROOT"

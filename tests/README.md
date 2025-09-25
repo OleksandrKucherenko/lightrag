@@ -328,6 +328,145 @@ docker compose ps redis
 docker compose logs redis
 ```
 
+## ⚠️ Common Pitfalls and Solutions
+
+### PowerShell Script Issues
+
+**1. Variable Reference Syntax Errors**
+
+❌ **Problem**: PowerShell fails with "Variable reference is not valid. ':' was not followed by a valid variable name character"
+```powershell
+Write-Output "ERROR: Connection failed for $url: $($_.Exception.Message)"
+```
+
+✅ **Solution**: Replace colons with dashes in string literals containing variable expressions
+```powershell
+Write-Output "ERROR: Connection failed for $url - $($_.Exception.Message)"
+```
+
+**2. Certificate Detection with Spaces and Special Characters**
+
+❌ **Problem**: mkcert certificates not detected due to case-sensitive matching and limited search fields
+```powershell
+$certificates = $store.Certificates | Where-Object { $_.Subject -like "*$Subject*" }
+```
+
+✅ **Solution**: Use case-insensitive matching across multiple certificate fields
+```powershell
+$certificates = $store.Certificates | Where-Object { 
+    $_.Subject -ilike "*$Subject*" -or
+    $_.Issuer -ilike "*$Subject*" -or
+    $_.FriendlyName -ilike "*$Subject*"
+}
+```
+
+**3. Windows Path Handling in WSL2**
+
+❌ **Problem**: UNC paths cause script execution failures
+```
+\\wsl.localhost\Ubuntu\mnt\workspace\lightrag
+UNC paths are not supported
+```
+
+✅ **Solution**: Copy scripts to Windows temp folder before execution (handled by framework)
+```bash
+# Framework automatically handles this via copy_to_windows_temp() function
+```
+
+### Bash Script Output Format Issues
+
+**4. Multiline Output Breaking Framework Parsing**
+
+❌ **Problem**: Commands with newlines break the `STATUS|CHECK_NAME|MESSAGE|COMMAND` format
+```bash
+key_count=$(echo "$keys_result" | wc -l)  # Contains newline
+echo "INFO|redis_storage|Keys: $key_count|command"  # Breaks parsing
+```
+
+✅ **Solution**: Clean all command output of newlines and carriage returns
+```bash
+key_count=$(echo "$keys_result" | wc -l | tr -d '\n\r')
+echo "INFO|redis_storage|Keys: $key_count|command"
+```
+
+**5. Variable Contamination from Command Output**
+
+❌ **Problem**: Variables contain unexpected whitespace or control characters
+```bash
+result=$(docker exec container command)
+echo "STATUS|check|Result: $result|command"  # May contain newlines
+```
+
+✅ **Solution**: Always clean command output before using in variables
+```bash
+result=$(docker exec container command | tr -d '\n\r')
+# Or use head/tail to get specific lines
+result=$(docker exec container command | head -1 | tr -d '\n\r')
+```
+
+### Certificate Store and SSL Issues
+
+**6. Incomplete Certificate Store Search**
+
+❌ **Problem**: Only checking LocalMachine store misses user-installed certificates
+```powershell
+Get-ChildItem Cert:\LocalMachine\Root | Where-Object Subject -like '*mkcert*'
+```
+
+✅ **Solution**: Search both LocalMachine and CurrentUser stores
+```powershell
+$stores = @("Cert:\LocalMachine\Root", "Cert:\CurrentUser\Root")
+foreach ($store in $stores) {
+    Get-ChildItem $store | Where-Object Subject -ilike '*mkcert*'
+}
+```
+
+**7. Insufficient mkcert Pattern Matching**
+
+❌ **Problem**: mkcert certificates have various subject formats not caught by simple patterns
+```powershell
+$mkcertSubjects = @("mkcert")
+```
+
+✅ **Solution**: Use comprehensive pattern list for mkcert detection
+```powershell
+$mkcertSubjects = @(
+    "mkcert", 
+    "mkcert development CA", 
+    "mkcert root CA",
+    "mkcert development certificate",
+    "development CA",
+    "localhost"
+)
+```
+
+### Framework Integration Issues
+
+**8. Status Code Misuse**
+
+❌ **Problem**: Using FAIL for intentionally disabled features
+```bash
+echo "FAIL|ssl_certificates|SSL not configured"
+```
+
+✅ **Solution**: Use appropriate status codes for different scenarios
+```bash
+echo "DISABLED|ssl_certificates|SSL intentionally not configured"  # Expected state
+echo "BROKEN|ssl_certificates|SSL configuration corrupted"         # Needs fixing
+echo "FAIL|ssl_certificates|SSL validation failed"                 # Test failed
+echo "INFO|ssl_certificates|SSL status information"                # Informational
+```
+
+### Best Practices Summary
+
+1. **Always clean command output**: Use `tr -d '\n\r'` on any command output used in variables
+2. **Use case-insensitive matching**: PowerShell `-ilike` and `-imatch` instead of `-like` and `-match`
+3. **Search multiple certificate stores**: Check both LocalMachine and CurrentUser stores
+4. **Avoid colons in PowerShell strings**: Use dashes or other separators with variable expressions
+5. **Use appropriate status codes**: DISABLED for intentional, BROKEN for errors, FAIL for test failures
+6. **Test with spaces and special characters**: Ensure scripts handle paths and names with spaces
+7. **Provide debug information**: When detection fails, show what was actually found
+
 ## 🚀 Integration with Development Workflow
 
 ### Pre-commit Validation

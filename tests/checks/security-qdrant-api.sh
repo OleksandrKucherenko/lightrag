@@ -27,30 +27,30 @@ if [[ -z "$QDRANT_API_KEY" ]]; then
     # WHEN: No API key is configured
     # THEN: Qdrant should be accessible without authentication (DISABLED state)
     
-    if result=$(docker compose exec -T vectors curl -s --connect-timeout 5 "$base_url/collections" 2>&1); then
+    if result=$(docker run --rm --network container:vectors alpine/curl:latest curl -s --connect-timeout 5 "$base_url/collections" 2>&1); then
         if echo "$result" | jq . >/dev/null 2>&1; then
-            echo "DISABLED|qdrant_api|No API key configured - open access|curl -s $base_url/collections"
+            echo "DISABLED|qdrant_api|No API key configured - open access|docker run --rm --network container:vectors alpine/curl:latest curl -s $base_url/collections"
         else
-            echo "BROKEN|qdrant_api|No API key set but invalid response: ${result:0:50}|curl -s $base_url/collections"
+            echo "BROKEN|qdrant_api|No API key set but invalid response: ${result:0:50}|docker run --rm --network container:vectors alpine/curl:latest curl -s $base_url/collections"
         fi
     else
-        echo "BROKEN|qdrant_api|Cannot connect to Qdrant|curl -s $base_url/collections"
+        echo "BROKEN|qdrant_api|Cannot connect to Qdrant|docker run --rm --network container:vectors alpine/curl:latest curl -s $base_url/collections"
     fi
 else
     # WHEN: API key is configured
     # THEN: Test both unauthenticated (should fail) and authenticated (should work)
     
     # Test without API key
-    unauth_result=$(docker compose exec -T vectors curl -s -w "%{http_code}" -o /dev/null --connect-timeout 5 "$base_url/collections" 2>/dev/null || echo "0")
+    unauth_result=$(docker run --rm --network container:vectors alpine/curl:latest curl -s -w "%{http_code}" -o /dev/null --connect-timeout 5 "$base_url/collections" 2>/dev/null || echo "0")
     
     # Test with API key
-    auth_result=$(docker compose exec -T vectors curl -s -w "%{http_code}" -o /dev/null --connect-timeout 5 -H "api-key: $QDRANT_API_KEY" "$base_url/collections" 2>/dev/null || echo "0")
+    auth_result=$(docker run --rm --network container:vectors alpine/curl:latest curl -s -w "%{http_code}" -o /dev/null --connect-timeout 5 -H "api-key: $QDRANT_API_KEY" "$base_url/collections" 2>/dev/null || echo "0")
     
     if [[ "$unauth_result" =~ ^(401|403)$ ]] && [[ "$auth_result" == "200" ]]; then
-        echo "ENABLED|qdrant_api|API key protection working|curl -s -H 'api-key: \$QDRANT_API_KEY' $base_url/collections"
+        echo "ENABLED|qdrant_api|API key protection working|docker run --rm --network container:vectors alpine/curl:latest curl -s -H 'api-key: \$QDRANT_API_KEY' $base_url/collections"
     elif [[ "$unauth_result" == "200" ]]; then
-        echo "BROKEN|qdrant_api|API key set but no protection active|curl -s $base_url/collections"
+        echo "BROKEN|qdrant_api|API key set but no protection active|docker run --rm --network container:vectors alpine/curl:latest curl -s $base_url/collections"
     else
-        echo "BROKEN|qdrant_api|API key auth failed (unauth: $unauth_result, auth: $auth_result)|curl -s -H 'api-key: \$QDRANT_API_KEY' $base_url/collections"
+        echo "BROKEN|qdrant_api|API key auth failed (unauth: $unauth_result, auth: $auth_result)|docker run --rm --network container:vectors alpine/curl:latest curl -s -H 'api-key: \$QDRANT_API_KEY' $base_url/collections"
     fi
 fi

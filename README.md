@@ -17,6 +17,7 @@
       - [From WSL2: publish subdomains to Windows hosts via hostctl (auto)](#from-wsl2-publish-subdomains-to-windows-hosts-via-hostctl-auto)
     - [Solution Secrets](#solution-secrets)
   - [Services](#services)
+    - [Dependency Graph](#dependency-graph)
     - [Caddy](#caddy)
     - [Lazydocker Web UI](#lazydocker-web-ui)
     - [LobeChat - AI Chat Interface](#lobechat---ai-chat-interface)
@@ -372,7 +373,38 @@ This is already done by MISE tool for you.
 
 ## Services
 
+### Dependency Graph
+
+The following diagram visualizes service startup dependencies defined in `docker-compose.yaml`.
+
+```mermaid
+graph LR
+  proxy((proxy))
+  monitor((monitor))
+  kv((kv))
+  service_graph((graph))
+  graph_ui((graph-ui))
+  vectors((vectors))
+  rag((rag))
+  lobechat((lobechat))
+
+  monitor --> proxy
+  kv --> proxy
+  graph_ui --> proxy
+  graph_ui --> service_graph
+  vectors --> proxy
+  rag --> proxy
+  rag --> kv
+  rag --> vectors
+  rag --> service_graph
+  lobechat --> proxy
+  lobechat --> rag
+  lobechat --> kv
+```
+
 ### Caddy
+
+Caddy server provides reverse proxy, HTTPS termination, and automatic routing for all services.
 
 ```bash
 # Validate configuration

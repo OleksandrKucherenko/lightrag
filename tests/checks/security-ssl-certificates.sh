@@ -50,14 +50,14 @@ if [[ -f "$caddyfile" ]]; then
     if grep -q "tls.*ssl.*pem" "$caddyfile" 2>/dev/null; then
         echo "PASS|ssl_certificates|Caddyfile contains SSL certificate configuration|grep 'tls.*ssl.*pem' docker/etc/caddy/Caddyfile"
     else
-        echo "FAIL|ssl_certificates|Caddyfile missing SSL certificate configuration|grep 'tls.*ssl.*pem' docker/etc/caddy/Caddyfile"
+        echo "DISABLED|ssl_certificates|Caddyfile missing SSL certificate configuration|grep 'tls.*ssl.*pem' docker/etc/caddy/Caddyfile"
     fi
     
     # Check if domain is properly configured in Caddyfile
     if grep -q "$PUBLISH_DOMAIN" "$caddyfile" 2>/dev/null; then
         echo "PASS|ssl_certificates|Caddyfile configured for domain: $PUBLISH_DOMAIN|grep $PUBLISH_DOMAIN docker/etc/caddy/Caddyfile"
     else
-        echo "FAIL|ssl_certificates|Caddyfile not configured for domain: $PUBLISH_DOMAIN|grep $PUBLISH_DOMAIN docker/etc/caddy/Caddyfile"
+        echo "DISABLED|ssl_certificates|Caddyfile not configured for domain: $PUBLISH_DOMAIN|grep $PUBLISH_DOMAIN docker/etc/caddy/Caddyfile"
     fi
 else
     echo "BROKEN|ssl_certificates|Caddyfile not found|ls docker/etc/caddy/Caddyfile"

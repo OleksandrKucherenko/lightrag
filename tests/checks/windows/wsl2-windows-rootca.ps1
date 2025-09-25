@@ -98,12 +98,12 @@ try {
 } catch [System.Net.WebException] {
     $exception = $_.Exception
     if ($exception.Message -like "*SSL*" -or $exception.Message -like "*certificate*" -or $exception.Message -like "*trust*") {
-        Write-Output "FAIL|windows_rootca|SSL validation failed for $url - certificate not trusted: $($exception.Message)|Invoke-WebRequest -Uri $url"
+        Write-Output "FAIL|windows_rootca|SSL validation failed for $url - certificate not trusted - $($exception.Message)|Invoke-WebRequest -Uri $url"
     } else {
-        Write-Output "INFO|windows_rootca|Connection failed for $url (may be service unavailable): $($exception.Message)|Invoke-WebRequest -Uri $url"
+        Write-Output "INFO|windows_rootca|Connection failed for $url (may be service unavailable) - $($exception.Message)|Invoke-WebRequest -Uri $url"
     }
 } catch {
-    Write-Output "INFO|windows_rootca|SSL test failed for $url: $($_.Exception.Message)|Invoke-WebRequest -Uri $url"
+    Write-Output "INFO|windows_rootca|SSL test failed for $url - $($_.Exception.Message)|Invoke-WebRequest -Uri $url"
 }
 
 # Check if mkcert command is available on Windows
@@ -131,7 +131,7 @@ try {
                 Write-Output "FAIL|windows_rootca|mkcert CAROOT not configured or inaccessible: $caroot|mkcert -CAROOT"
             }
         } catch {
-            Write-Output "FAIL|windows_rootca|Cannot get mkcert CAROOT: $($_.Exception.Message)|mkcert -CAROOT"
+            Write-Output "FAIL|windows_rootca|Cannot get mkcert CAROOT - $($_.Exception.Message)|mkcert -CAROOT"
         }
     } else {
         Write-Output "INFO|windows_rootca|mkcert command available but version check failed|mkcert -version"
@@ -149,7 +149,7 @@ try {
     
     Write-Output "INFO|windows_rootca|Windows Root certificate store accessible: $certCount certificates|Get-ChildItem Cert:\LocalMachine\Root | Measure-Object"
 } catch {
-    Write-Output "FAIL|windows_rootca|Cannot access Windows Root certificate store: $($_.Exception.Message)|Get-ChildItem Cert:\LocalMachine\Root"
+    Write-Output "FAIL|windows_rootca|Cannot access Windows Root certificate store - $($_.Exception.Message)|Get-ChildItem Cert:\LocalMachine\Root"
 }
 
 # Test certificate validation for subdomains
@@ -165,15 +165,15 @@ foreach ($subdomain in $subdomains) {
         $statusCode = [int]$response.StatusCode
         $response.Close()
         
-        Write-Output "PASS|windows_rootca|Subdomain SSL validation successful: $subdomainUrl (HTTP $statusCode)|Invoke-WebRequest -Uri $subdomainUrl"
+        Write-Output "PASS|windows_rootca|Subdomain SSL validation successful - $subdomainUrl (HTTP $statusCode)|Invoke-WebRequest -Uri $subdomainUrl"
     } catch [System.Net.WebException] {
         $exception = $_.Exception
         if ($exception.Message -like "*SSL*" -or $exception.Message -like "*certificate*") {
-            Write-Output "FAIL|windows_rootca|Subdomain SSL validation failed: $subdomainUrl - $($exception.Message)|Invoke-WebRequest -Uri $subdomainUrl"
+            Write-Output "FAIL|windows_rootca|Subdomain SSL validation failed - $subdomainUrl - $($exception.Message)|Invoke-WebRequest -Uri $subdomainUrl"
         } else {
-            Write-Output "INFO|windows_rootca|Subdomain connection failed: $subdomainUrl (may be service unavailable)|Invoke-WebRequest -Uri $subdomainUrl"
+            Write-Output "INFO|windows_rootca|Subdomain connection failed - $subdomainUrl (may be service unavailable)|Invoke-WebRequest -Uri $subdomainUrl"
         }
     } catch {
-        Write-Output "INFO|windows_rootca|Subdomain SSL test error: $subdomainUrl - $($_.Exception.Message)|Invoke-WebRequest -Uri $subdomainUrl"
+        Write-Output "INFO|windows_rootca|Subdomain SSL test error - $subdomainUrl - $($_.Exception.Message)|Invoke-WebRequest -Uri $subdomainUrl"
     }
 }

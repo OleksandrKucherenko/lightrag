@@ -41,9 +41,9 @@ else
     
     if [[ "$unauth_result" == *"NOAUTH"* || "$unauth_result" == *"Authentication required"* ]]; then
         if [[ "$auth_result" == "PONG" ]]; then
-            echo "ENABLED|redis_auth|Password protection working|docker exec kv redis-cli -a '\$REDIS_PASSWORD' ping"
+            echo "ENABLED|redis_auth|Password protection working|docker exec kv redis-cli -a \"$REDIS_PASSWORD\" ping"
         else
-            echo "BROKEN|redis_auth|Password set but auth failed|docker exec kv redis-cli -a '\$REDIS_PASSWORD' ping"
+            echo "BROKEN|redis_auth|Password set but auth failed|docker exec kv redis-cli -a \"$REDIS_PASSWORD\" ping"
         fi
     elif [[ "$auth_result" == "PONG" ]]; then
         echo "BROKEN|redis_auth|Password set but no auth required|docker exec kv redis-cli ping"

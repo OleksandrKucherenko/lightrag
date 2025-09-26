@@ -27,5 +27,7 @@ docker/logs/lightrag/*
 # LobeChat UI
 docker/data/lobechat/*
 
-# Generated hosts files (use dynamic generation instead)
-.etchosts.windows
+# temporary/debug files
+*.log
+*.~*~
+*.*~

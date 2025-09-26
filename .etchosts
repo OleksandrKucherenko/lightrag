@@ -17,4 +17,8 @@ ${HOST_IP} kv.${PUBLISH_DOMAIN}
 ${HOST_IP} graph.${PUBLISH_DOMAIN}
 ${HOST_IP} rag.${PUBLISH_DOMAIN}
 ${HOST_IP} vector.${PUBLISH_DOMAIN}
+# New domain-based approach subdomains
+${HOST_IP} chat.${PUBLISH_DOMAIN}
+${HOST_IP} api.${PUBLISH_DOMAIN}
+# Backward compatibility
 ${HOST_IP} lobechat.${PUBLISH_DOMAIN}

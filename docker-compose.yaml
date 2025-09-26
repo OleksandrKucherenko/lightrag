@@ -267,12 +267,17 @@ services:
       caddy: "https://rag.${PUBLISH_DOMAIN}"
       caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.reverse_proxy: "{{upstreams 9621}}"
+      # Additional API subdomain for LobeChat integration (eliminates CORS)
+      caddy_1: "https://api.${PUBLISH_DOMAIN}"
+      caddy_1.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
+      caddy_1.reverse_proxy: "{{upstreams 9621}}"
+      # Let LightRAG handle CORS internally, just route the traffic
+      caddy_1.header: "-Server"
     healthcheck:
       <<: *default-healthcheck
       test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/9621' || exit 1
     deploy: *deploy-medium
     logging: *default-logging
-
 
   # LobeChat Frontend
   lobechat:
@@ -290,7 +295,8 @@ services:
     environment:
       - DATABASE_URL=redis://:${REDIS_PASSWORD}@kv:6379/2
       - REDIS_URL=redis://:${REDIS_PASSWORD}@kv:6379/3
-      - OLLAMA_PROXY_URL=http://rag:9621/v1
+      - OLLAMA_PROXY_URL=http://rag:9621
+      - OPENAI_API_KEY=${LIGHTRAG_API_KEY}
       - ACCESS_CODE=${LOBECHAT_ACCESS_CODE:-}
       - NODE_OPTIONS=--max_old_space_size=2048
     volumes:
@@ -301,10 +307,14 @@ services:
     ports:
       - 3210:3210
     labels:
-      # Caddy labels for automatic subdomain routing
-      caddy: "https://lobechat.${PUBLISH_DOMAIN}"
+      # Caddy labels for automatic subdomain routing - using 'chat' subdomain
+      caddy: "https://chat.${PUBLISH_DOMAIN}"
       caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.reverse_proxy: "{{upstreams 3210}}"
+      # Alternative lobechat subdomain for backward compatibility
+      caddy_1: "https://lobechat.${PUBLISH_DOMAIN}"
+      caddy_1.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
+      caddy_1.reverse_proxy: "{{upstreams 3210}}"
     healthcheck:
       <<: *default-healthcheck
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3210/" ]

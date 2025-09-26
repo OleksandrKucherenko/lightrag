@@ -153,7 +153,8 @@ services:
   # Memgraph - Graph Storage
   graph:
     # ref: https://hub.docker.com/r/memgraph/memgraph-mage
-    image: memgraph/memgraph-mage:latest
+    # ref2: https://hub.docker.com/r/memgraph/memgraph - smaller image
+    image: memgraph/memgraph:latest
     container_name: graph
     restart: unless-stopped
     env_file:

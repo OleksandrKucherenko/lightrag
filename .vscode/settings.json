@@ -20,4 +20,7 @@
     "terminal.integrated.fontFamily": "Cascadia Code NF",
     "terminal.integrated.fontWeight": "100",
     "terminal.integrated.fontSize": 15,
+    "debug.javascript.defaultRuntimeExecutable": {
+        "pwa-node": "/home/developer/.local/share/mise/shims/node"
+    },
 }

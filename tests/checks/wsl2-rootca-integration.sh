@@ -36,7 +36,7 @@ if command -v powershell.exe >/dev/null 2>&1; then
     # Run the PowerShell certificate check
     ps_script="${SCRIPT_DIR}/wsl2-windows-rootca.ps1"
     if [[ -f "$ps_script" ]]; then
-        echo "INFO|rootca_integration|Running Windows certificate validation via PowerShell|powershell.exe -File $ps_script"
+        echo "INFO|rootca_integration|Running Windows certificate validation via PowerShell|powershell.exe -ExecutionPolicy Bypass -File $ps_script"
         
         # Convert WSL path to Windows path and run the PowerShell script
         if windows_path=$(wslpath -w "$ps_script" 2>/dev/null); then

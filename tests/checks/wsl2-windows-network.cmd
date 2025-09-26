@@ -8,8 +8,10 @@ REM WHEN: We test network connectivity between WSL2 and Windows
 REM THEN: We verify network integration is working properly
 REM =============================================================================
 
-REM Change to Windows temp directory to avoid UNC path issues
+REM Suppress UNC path warnings and change to Windows temp directory
 cd /d %TEMP% >nul 2>&1
+REM Clear any error messages from UNC path issues
+cls >nul 2>&1
 
 REM Check if we can resolve Windows hostname from WSL2 (with timeout)
 ping -n 1 -w 2000 %COMPUTERNAME% >nul 2>&1

@@ -41,13 +41,31 @@ foreach ($subdomain in $subdomains) {
         }
         
         # Test HTTP connectivity
-        $response = Invoke-WebRequest -Uri $url -Method HEAD -TimeoutSec 5 -SkipCertificateCheck -ErrorAction SilentlyContinue
-        if ($response.StatusCode -eq 200) {
-            Write-Output "PASS|subdomain_http|$description accessible via HTTPS: $url (HTTP $($response.StatusCode))|curl -I $url"
-        } elseif ($response.StatusCode -in @(401, 403)) {
-            Write-Output "PASS|subdomain_http|$description accessible with auth required: $url (HTTP $($response.StatusCode))|curl -I $url"
-        } else {
-            Write-Output "FAIL|subdomain_http|$description unexpected status: $url (HTTP $($response.StatusCode))|curl -I $url"
+        try {
+            $response = Invoke-WebRequest -Uri $url -Method HEAD -TimeoutSec 5 -SkipCertificateCheck -ErrorAction Stop
+            if ($response -and $response.StatusCode) {
+                if ($response.StatusCode -eq 200) {
+                    Write-Output "PASS|subdomain_http|$description accessible via HTTPS: $url (HTTP $($response.StatusCode))|curl -I $url"
+                } elseif ($response.StatusCode -in @(401, 403)) {
+                    Write-Output "PASS|subdomain_http|$description accessible with auth required: $url (HTTP $($response.StatusCode))|curl -I $url"
+                } else {
+                    Write-Output "FAIL|subdomain_http|$description unexpected status: $url (HTTP $($response.StatusCode))|curl -I $url"
+                }
+            } else {
+                Write-Output "FAIL|subdomain_http|$description no response received: $url|curl -I $url"
+            }
+        } catch [System.Net.WebException] {
+            $webException = $_.Exception
+            if ($webException.Response) {
+                $statusCode = [int]$webException.Response.StatusCode
+                if ($statusCode -in @(401, 403)) {
+                    Write-Output "PASS|subdomain_http|$description accessible with auth required: $url (HTTP $statusCode)|curl -I $url"
+                } else {
+                    Write-Output "FAIL|subdomain_http|$description HTTP error: $url (HTTP $statusCode)|curl -I $url"
+                }
+            } else {
+                Write-Output "FAIL|subdomain_http|$description connection failed: $url - $($webException.Message)|curl -I $url"
+            }
         }
     } catch {
         # Try with curl as fallback

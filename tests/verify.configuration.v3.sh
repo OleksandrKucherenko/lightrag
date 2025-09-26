@@ -482,7 +482,7 @@ run_powershell_script() {
   if windows_path=$(copy_to_windows_temp "$script_path"); then
     # Run PowerShell script with timeout and parse output
     local output
-    if output=$(run_with_timeout "$CHECK_TIMEOUT" "$script_name" powershell.exe -ExecutionPolicy Bypass -File "$windows_path"); then
+    if output=$(run_with_timeout "$CHECK_TIMEOUT" "$script_name" powershell.exe -ExecutionPolicy Bypass -NoProfile -File "$windows_path"); then
       # Parse each line of output
       while IFS= read -r line; do
         [[ -z "$line" ]] && continue

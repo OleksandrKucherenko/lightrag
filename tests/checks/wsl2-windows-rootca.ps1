@@ -176,9 +176,9 @@ try {
 
     $fromWsl = [bool]($env:WSL_DISTRO_NAME -or $env:WSLENV)
     if ($fromWsl) {
-        Publish "INFO" "Running from WSL2 environment: $($env:WSL_DISTRO_NAME)" "echo `$WSL_DISTRO_NAME"
+        Publish "INFO" "Running from WSL2 environment`: $($env:WSL_DISTRO_NAME)" "echo `$WSL_DISTRO_NAME"
     } else {
-        Publish "INFO" "Running directly on Windows host: $env:COMPUTERNAME" "echo `$env:COMPUTERNAME"
+        Publish "INFO" "Running directly on Windows host`: $env:COMPUTERNAME" "echo `$env:COMPUTERNAME"
     }
 
     $expectedImportCommand = "sudo Import-Certificate -FilePath rootCA.cer -CertStoreLocation Cert:\LocalMachine\Root"
@@ -197,39 +197,39 @@ try {
     try {
         Add-Type -AssemblyName System.Security
     } catch {
-        Publish "BROKEN" "System.Security assembly unavailable: $($_.Exception.Message)" "Add-Type -AssemblyName System.Security"
+        Publish "BROKEN" "System.Security assembly unavailable`: $($_.Exception.Message)" "Add-Type -AssemblyName System.Security"
         return
     }
 
     try {
         $rootCaCert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($rootCaPath)
     } catch {
-        Publish "BROKEN" "Unable to load root CA certificate from $rootCaPath: $($_.Exception.Message)" $expectedImportCommand
+        Publish "BROKEN" "Unable to load root CA certificate from $rootCaPath`: $($_.Exception.Message)" $expectedImportCommand
         return
     }
 
     $rootCaThumbprint = ($rootCaCert.Thumbprint -replace "\s", "").ToUpperInvariant()
     $rootCaSubject = $rootCaCert.Subject
-    Publish "INFO" "Loaded root CA certificate: $rootCaSubject (Thumbprint $rootCaThumbprint)" "Get-ChildItem '$rootCaPath'"
+    Publish "INFO" "Loaded root CA certificate`: $rootCaSubject (Thumbprint $rootCaThumbprint)" "Get-ChildItem '$rootCaPath'"
 
     try {
         $storeProbe = [System.Security.Cryptography.X509Certificates.X509Store]::new("Root", "LocalMachine")
         $storeProbe.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
         $storeProbe.Close()
     } catch {
-        Publish "BROKEN" "Windows certificate store not accessible: $($_.Exception.Message)" "New-Object System.Security.Cryptography.X509Certificates.X509Store"
+        Publish "BROKEN" "Windows certificate store not accessible`: $($_.Exception.Message)" "New-Object System.Security.Cryptography.X509Certificates.X509Store"
         return
     }
 
     $localRootResult = Test-CertificateByThumbprint -StoreName "Root" -StoreLocation "LocalMachine" -Thumbprint $rootCaThumbprint
     if ($localRootResult.Error) {
-        Publish "BROKEN" "Error inspecting LocalMachine root store: $($localRootResult.Error)" $expectedImportCommand
+        Publish "BROKEN" "Error inspecting LocalMachine root store`: $($localRootResult.Error)" $expectedImportCommand
     } elseif ($localRootResult.Found) {
         Publish "PASS" "rootCA certificate present in LocalMachine Root store (matches rootCA.cer)" $expectedImportCommand
     } else {
         $userRootResult = Test-CertificateByThumbprint -StoreName "Root" -StoreLocation "CurrentUser" -Thumbprint $rootCaThumbprint
         if ($userRootResult.Error) {
-            Publish "BROKEN" "Error inspecting CurrentUser root store: $($userRootResult.Error)" $expectedImportCommand
+            Publish "BROKEN" "Error inspecting CurrentUser root store`: $($userRootResult.Error)" $expectedImportCommand
         } elseif ($userRootResult.Found) {
             Publish "FAIL" "rootCA certificate installed in CurrentUser Root store; re-run import with elevated PowerShell" $expectedImportCommand
         } else {
@@ -239,17 +239,17 @@ try {
 
     $domainResult = Test-CertificateInStore -StoreName "My" -StoreLocation "LocalMachine" -Subject $domain
     if ($domainResult.Error) {
-        Publish "INFO" "Error inspecting LocalMachine personal store for '$domain': $($domainResult.Error)" "Get-ChildItem Cert:\LocalMachine\My"
+        Publish "INFO" "Error inspecting LocalMachine personal store for '$domain'`: $($domainResult.Error)" "Get-ChildItem Cert:\LocalMachine\My"
     } elseif ($domainResult.Found) {
-        Publish "PASS" "Domain certificate found in Windows Personal store: $domain ($($domainResult.Count) certificates)" "Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -like '*$domain*'"
+        Publish "PASS" "Domain certificate found in Windows Personal store`: $domain ($($domainResult.Count) certificates)" "Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -like '*$domain*'"
     } else {
         $userDomainResult = Test-CertificateInStore -StoreName "My" -StoreLocation "CurrentUser" -Subject $domain
         if ($userDomainResult.Error) {
-            Publish "INFO" "Error inspecting CurrentUser personal store for '$domain': $($userDomainResult.Error)" "Get-ChildItem Cert:\CurrentUser\My"
+            Publish "INFO" "Error inspecting CurrentUser personal store for '$domain'`: $($userDomainResult.Error)" "Get-ChildItem Cert:\CurrentUser\My"
         } elseif ($userDomainResult.Found) {
-            Publish "INFO" "Domain certificate found in CurrentUser Personal store: $domain ($($userDomainResult.Count) certificates)" "Get-ChildItem Cert:\CurrentUser\My | Where-Object Subject -like '*$domain*'"
+            Publish "INFO" "Domain certificate found in CurrentUser Personal store`: $domain ($($userDomainResult.Count) certificates)" "Get-ChildItem Cert:\CurrentUser\My | Where-Object Subject -like '*$domain*'"
         } else {
-            Publish "INFO" "Domain certificate not found in Windows certificate stores: $domain" "Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -like '*$domain*'"
+            Publish "INFO" "Domain certificate not found in Windows certificate stores`: $domain" "Get-ChildItem Cert:\LocalMachine\My | Where-Object Subject -like '*$domain*'"
         }
     }
 
@@ -264,25 +264,25 @@ try {
     try {
         $mkcertVersion = & mkcert -version 2>$null
         if ($mkcertVersion) {
-            Publish "PASS" "mkcert tool available on Windows: $mkcertVersion" "mkcert -version"
+            Publish "PASS" "mkcert tool available on Windows`: $mkcertVersion" "mkcert -version"
 
             try {
                 $caroot = & mkcert -CAROOT 2>$null
                 if ($caroot -and (Test-Path $caroot)) {
-                    Publish "PASS" "mkcert CAROOT configured: $caroot" "mkcert -CAROOT"
+                    Publish "PASS" "mkcert CAROOT configured`: $caroot" "mkcert -CAROOT"
 
                     $rootCaPem = Join-Path $caroot "rootCA.pem"
                     $rootCaKey = Join-Path $caroot "rootCA-key.pem"
                     if ((Test-Path $rootCaPem) -and (Test-Path $rootCaKey)) {
                         Publish "PASS" "mkcert root CA files exist in CAROOT" "ls `"$caroot`""
                     } else {
-                        Publish "FAIL" "mkcert root CA files missing in CAROOT: $caroot" "ls `"$caroot`""
+                        Publish "FAIL" "mkcert root CA files missing in CAROOT`: $caroot" "ls `"$caroot`""
                     }
                 } else {
                     Publish "FAIL" "mkcert CAROOT not configured or inaccessible" "mkcert -CAROOT"
                 }
             } catch {
-                Publish "FAIL" "Cannot determine mkcert CAROOT: $($_.Exception.Message)" "mkcert -CAROOT"
+                Publish "FAIL" "Cannot determine mkcert CAROOT`: $($_.Exception.Message)" "mkcert -CAROOT"
             }
         } else {
             Publish "INFO" "mkcert command available but version detection returned no output" "mkcert -version"
@@ -296,11 +296,11 @@ try {
         $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
         $certCount = $store.Certificates.Count
         $store.Close()
-        Publish "INFO" "Windows Root certificate store accessible: $certCount certificates" "Get-ChildItem Cert:\LocalMachine\Root | Measure-Object"
+        Publish "INFO" "Windows Root certificate store accessible`: $certCount certificates" "Get-ChildItem Cert:\LocalMachine\Root | Measure-Object"
     } catch {
-        Publish "FAIL" "Cannot access Windows Root certificate store: $($_.Exception.Message)" "Get-ChildItem Cert:\LocalMachine\Root"
+        Publish "FAIL" "Cannot access Windows Root certificate store`: $($_.Exception.Message)" "Get-ChildItem Cert:\LocalMachine\Root"
     }
 
 } catch {
-    Publish "BROKEN" "Unexpected PowerShell error: $($_.Exception.Message)" "wsl2-windows-rootca.ps1"
+    Publish "BROKEN" "Unexpected PowerShell error`: $($_.Exception.Message)" "wsl2-windows-rootca.ps1"
 }

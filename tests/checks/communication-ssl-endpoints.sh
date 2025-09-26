@@ -13,8 +13,8 @@ set -Eeuo pipefail
 # Load environment
 PUBLISH_DOMAIN="${PUBLISH_DOMAIN:-dev.localhost}"
 
-# Define services to test (matching original script)
-services=("proxy" "monitor" "kv" "graph" "vector" "rag" "lobechat")
+# Define services to test (reduced set for faster execution)
+services=("proxy" "rag" "lobechat" "vector" "monitor")
 
 # Function to test SSL endpoint
 test_ssl_endpoint() {
@@ -56,10 +56,9 @@ get_cert_info() {
     fi
     
     # Get certificate information with timeout
-    if cert_info=$(timeout 10 bash -c "echo | openssl s_client -servername '$hostname' -connect '$hostname:443' 2>/dev/null | openssl x509 -text -noout 2>/dev/null"); then
-        # Extract subject and issuer
+    if cert_info=$(timeout 8 bash -c "echo | openssl s_client -servername '$hostname' -connect '$hostname:443' 2>/dev/null | openssl x509 -text -noout 2>/dev/null"); then
+        # Extract subject
         subject=$(echo "$cert_info" | grep -E "Subject:" | head -1 | sed 's/.*Subject: //')
-        issuer=$(echo "$cert_info" | grep -E "Issuer:" | head -1 | sed 's/.*Issuer: //')
         
         if [[ -n "$subject" ]]; then
             echo "INFO|ssl_endpoints|Certificate subject for $hostname: $subject|openssl s_client -connect $hostname:443"

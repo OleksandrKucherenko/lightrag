@@ -31,3 +31,11 @@ docker/data/lobechat/*
 *.log
 *.~*~
 *.*~
+
+# LLM spec-kit
+!.kilocode/
+
+.opencode/
+.windsurf/workflows
+.codex/
+specs/

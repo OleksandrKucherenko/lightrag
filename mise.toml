@@ -35,6 +35,10 @@ run = [
     "mkdir -p docker/logs/lightrag",
     # webui
     "mkdir -p docker/data/lobechat",
+    # LLM/IDE folders
+    "mkdir -p .windsurf .opencode",
+    "[ ! -d .windsurf ] && ln -s $(pwd)/.kilocode/workflows .windsurf/workflows",
+    "[ ! -d .opencode ] && ln -s $(pwd)/.kilocode/workflows .opencode/command",
 ]
 
 [tasks.hosts-update]

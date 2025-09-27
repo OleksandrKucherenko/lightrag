@@ -22,6 +22,7 @@ This directory contains a comprehensive Test-Driven Development (TDD) framework 
     - [2. Follow Standard Structure](#2-follow-standard-structure)
     - [3. Use Standard Output Format](#3-use-standard-output-format)
     - [4. Auto-Discovery](#4-auto-discovery)
+    - [Template-Based Generator](#template-based-generator)
   - [🎨 GIVEN/WHEN/THEN Structure](#-givenwhenthen-structure)
   - [🌐 Multi-Platform Support](#-multi-platform-support)
     - [Environment Detection](#environment-detection)
@@ -34,6 +35,12 @@ This directory contains a comprehensive Test-Driven Development (TDD) framework 
   - [🔍 Troubleshooting](#-troubleshooting)
     - [Common Issues](#common-issues)
     - [Debug Individual Checks](#debug-individual-checks)
+  - [⚠️ Common Pitfalls and Solutions](#️-common-pitfalls-and-solutions)
+    - [PowerShell Script Issues](#powershell-script-issues)
+    - [Bash Script Output Format Issues](#bash-script-output-format-issues)
+    - [Certificate Store and SSL Issues](#certificate-store-and-ssl-issues)
+    - [Framework Integration Issues](#framework-integration-issues)
+    - [Best Practices Summary](#best-practices-summary)
   - [🚀 Integration with Development Workflow](#-integration-with-development-workflow)
     - [Pre-commit Validation](#pre-commit-validation)
     - [CI/CD Integration](#cicd-integration)
@@ -195,6 +202,22 @@ The orchestrator automatically discovers and runs your new check based on the fi
 - Use `--interactive` to supply missing fields, or provide overrides such as `--group`, `--service`, `--test`, and `--script-type`.
 - Inspect available templates with `./tests/verify.configuration.v3.sh --list-templates` and validate them via `--validate-templates`.
 - Generated files follow the `{group}-{service}-{test}.{ext}` naming pattern and default to informative status output so they will not fail the suite until you implement the logic.
+
+```bash
+# example:
+./tests/verify.configuration.v3.sh /check \
+  --group security \
+  --service python \
+  --test deprecation \
+  "Test deprecation check. GIVEN: Python file moved WHEN: running script THEN: should work with MO"
+
+# Generated check: security-python-deprecation.sh
+# Template: bash_default
+# Group   : security
+# Service : python
+# Test    : deprecation
+# Reminder: Update the placeholder logic before running the orchestrator.
+```
 
 ## 🎨 GIVEN/WHEN/THEN Structure
 

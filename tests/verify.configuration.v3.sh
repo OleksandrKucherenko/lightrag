@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CHECKS_DIR="${SCRIPT_DIR}/checks"
 TEMPLATES_DIR="${SCRIPT_DIR}/templates"
-TEMPLATE_TOOL="${SCRIPT_DIR}/tools/check_template_system.py"
+MO_TOOL="${SCRIPT_DIR}/tools/mo.sh"
 
 # Colors for output
 if command -v tput >/dev/null 2>&1 && [[ -t 1 ]]; then
@@ -195,34 +195,243 @@ load_env_files() {
   done
 }
 
-ensure_template_tool() {
-  if [[ ! -f "$TEMPLATE_TOOL" ]]; then
-    printf "ERROR: Template management tool not found at %s\n" "$TEMPLATE_TOOL" >&2
+# =============================================================================
+# BASH-BASED TEMPLATE GENERATION FUNCTIONS (replaces Python usage)
+# =============================================================================
+
+parse_tdd_sections() {
+  local description="$1"
+  local given="" when="" then=""
+
+  # Split description by TDD keywords (case insensitive)
+  local parts
+  IFS=$'\n' read -r -d '' -a parts <<< "$(echo "$description" | grep -oP '(?i)(GIVEN|WHEN|THEN).*?(?=(?i)(GIVEN|WHEN|THEN|$))' || echo "$description")"
+
+  for part in "${parts[@]}"; do
+    if [[ "$part" =~ ^[Gg][Ii][Vv][Ee][Nn] ]]; then
+      given="${part#*:}"
+      given="${given#"${given%%[![:space:]]*}"}"  # trim leading whitespace
+    elif [[ "$part" =~ ^[Ww][Hh][Ee][Nn] ]]; then
+      when="${part#*:}"
+      when="${when#"${when%%[![:space:]]*}"}"
+    elif [[ "$part" =~ ^[Tt][Hh][Ee][Nn] ]]; then
+      then="${part#*:}"
+      then="${then#"${then%%[![:space:]]*}"}"
+    fi
+  done
+
+  # If no TDD sections found, treat whole description as THEN
+  if [[ -z "$given" && -z "$when" && -z "$then" ]]; then
+    then="$description"
+  fi
+
+  echo "$given|$when|$then"
+}
+
+infer_group_from_description() {
+  local description="$1"
+  local groups=("security" "storage" "communication" "environment" "monitoring" "performance" "wsl2")
+
+  for group in "${groups[@]}"; do
+    if echo "$description" | grep -qi "\\b$group\\b"; then
+      echo "$group"
+      return 0
+    fi
+  done
+
+  echo ""
+}
+
+infer_service_and_test() {
+  local description="$1" group="$2"
+  local service="" test_name=""
+
+  # Remove TDD guidance to focus on summary
+  local summary
+  summary="$(echo "$description" | sed 's/[Gg][Ii][Vv][Ee][Nn].*//;s/[Ww][Hh][Ee][Nn].*//;s/[Tt][Hh][Ee][Nn].*//' | head -1)"
+
+  # Pattern 1: "for redis authentication"
+  if [[ "$summary" =~ for[[:space:]]+([a-z0-9][a-z0-9_-]*)([[:space:]]+([a-z0-9][a-z0-9_-]*))? ]]; then
+    service="$(echo "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]' | tr '_' '-' | tr ' ' '-')"
+    if [[ -n "${BASH_REMATCH[3]}" ]]; then
+      test_name="$(echo "${BASH_REMATCH[3]}" | tr '[:upper:]' '[:lower:]' | tr '_' '-' | tr ' ' '-')"
+    fi
+  fi
+
+  # Pattern 2: group + service ("security redis authentication")
+  if [[ -z "$service" && -n "$group" ]]; then
+    if [[ "$summary" =~ $group[[:space:]]+([a-z0-9][a-z0-9_-]*)([[:space:]]+([a-z0-9][a-z0-9_-]*))? ]]; then
+      service="$(echo "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]' | tr '_' '-' | tr ' ' '-')"
+      if [[ -n "${BASH_REMATCH[3]}" ]]; then
+        test_name="$(echo "${BASH_REMATCH[3]}" | tr '[:upper:]' '[:lower:]' | tr '_' '-' | tr ' ' '-')"
+      fi
+    fi
+  fi
+
+  # Fallback: word after "for"
+  if [[ -z "$service" ]]; then
+    if [[ "$summary" =~ for[[:space:]]+([a-z0-9][a-z0-9_-]*) ]]; then
+      service="$(echo "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]' | tr '_' '-' | tr ' ' '-')"
+    fi
+  fi
+
+  # Look for verbs to derive test name
+  if [[ -z "$test_name" ]]; then
+    if [[ "$summary" =~ \b(ensure|verify|validate|confirm|check)\b[[:space:]]+([a-z0-9][a-z0-9_-]*[[:space:]]*[a-z0-9_-]*) ]]; then
+      test_name="$(echo "${BASH_REMATCH[2]}" | tr '[:upper:]' '[:lower:]' | tr '_' '-' | tr ' ' '-')"
+    fi
+  fi
+
+  echo "$service|$test_name"
+}
+
+slugify() {
+  local value="$1"
+  value="$(echo "$value" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//')"
+  echo "$value"
+}
+
+title_case() {
+  local result=""
+  for word in "$@"; do
+    if [[ -n "$word" ]]; then
+      result="$result $(echo "${word:0:1}" | tr '[:lower:]' '[:upper:]')$(echo "${word:1}" | tr '[:upper:]' '[:lower:]')"
+    fi
+  done
+  echo "${result#"${result%%[![:space:]]*}"}"  # trim leading space
+}
+
+ensure_mo_tool() {
+  if [[ ! -f "$MO_TOOL" ]]; then
+    printf "ERROR: MO template tool not found at %s\n" "$MO_TOOL" >&2
     return 1
   fi
 
-  if [[ ! -x "$TEMPLATE_TOOL" ]]; then
-    chmod +x "$TEMPLATE_TOOL" 2>/dev/null || true
-  fi
-
-  if [[ ! -x "$TEMPLATE_TOOL" ]] && ! command -v python3 >/dev/null 2>&1; then
-    printf "ERROR: python3 is required to run %s\n" "$TEMPLATE_TOOL" >&2
-    return 1
+  if [[ ! -x "$MO_TOOL" ]]; then
+    chmod +x "$MO_TOOL" 2>/dev/null || true
   fi
 
   return 0
 }
 
-run_template_tool() {
-  if [[ -x "$TEMPLATE_TOOL" ]]; then
-    "$TEMPLATE_TOOL" "$@"
-  elif command -v python3 >/dev/null 2>&1; then
-    python3 "$TEMPLATE_TOOL" "$@"
-  else
-    printf "ERROR: Unable to execute template tool (%s)\n" "$TEMPLATE_TOOL" >&2
+generate_check_with_mo() {
+  local description="$1" group="$2" service="$3" test_name="$4" script_type="$5" template_id="$6" output_dir="$7" force="$8"
+
+  # Parse TDD sections
+  local tdd_parts
+  IFS='|' read -r given when then <<< "$(parse_tdd_sections "$description")"
+
+  # Infer missing values
+  if [[ -z "$group" ]]; then
+    group="$(infer_group_from_description "$description")"
+  fi
+
+  if [[ -z "$service" || -z "$test_name" ]]; then
+    local inferred
+    IFS='|' read -r inf_service inf_test <<< "$(infer_service_and_test "$description" "$group")"
+    service="${service:-$inf_service}"
+    test_name="${test_name:-$inf_test}"
+  fi
+
+  # Validate required values
+  if [[ -z "$group" || -z "$service" || -z "$test_name" ]]; then
+    printf "ERROR: Could not determine group, service, or test name from description\n" >&2
+    printf "Please provide explicit --group, --service, and --test parameters\n" >&2
     return 1
   fi
+
+  # Select template
+  if [[ -z "$template_id" ]]; then
+    case "$script_type" in
+      bash) template_id="bash_default" ;;
+      powershell) template_id="powershell_default" ;;
+      cmd) template_id="cmd_default" ;;
+      *) template_id="bash_default" ;;
+    esac
+  fi
+
+  # Find template file
+  local template_path=""
+  case "$template_id" in
+    bash_default) template_path="$TEMPLATES_DIR/bash/default.sh.tpl" ;;
+    powershell_default) template_path="$TEMPLATES_DIR/powershell/default.ps1.tpl" ;;
+    cmd_default) template_path="$TEMPLATES_DIR/cmd/default.cmd.tpl" ;;
+    *) printf "ERROR: Unknown template_id: %s\n" "$template_id" >&2; return 1 ;;
+  esac
+
+  if [[ ! -f "$template_path" ]]; then
+    printf "ERROR: Template file not found: %s\n" "$template_path" >&2
+    return 1
+  fi
+
+  # Determine extension
+  local extension=""
+  case "$template_id" in
+    bash_default) extension="sh" ;;
+    powershell_default) extension="ps1" ;;
+    cmd_default) extension="cmd" ;;
+  esac
+
+  # Generate check ID and filename
+  local check_id="${group}_${service}_${test_name}"
+  local filename="${group}-${service}-${test_name}.${extension}"
+  local output_path="${output_dir:-$CHECKS_DIR}/$filename"
+
+  # Check if file exists
+  if [[ -f "$output_path" && "$force" != "true" ]]; then
+    printf "ERROR: Check file already exists: %s\n" "$output_path" >&2
+    printf "Use --force to overwrite\n" >&2
+    return 1
+  fi
+
+  # Generate title
+  local title
+  title="$(title_case "$group" "$service" "$test_name")"
+
+  # Determine command hint
+  local command_hint=""
+  case "$script_type" in
+    bash) command_hint="replace_with_command" ;;
+    powershell) command_hint="Replace-With-Command" ;;
+    cmd) command_hint="REPLACE_WITH_COMMAND" ;;
+  esac
+
+  # Set environment variables for MO
+  export TITLE="$title"
+  export GIVEN="$given"
+  export WHEN="$when"
+  export THEN="$then"
+  export CHECK_ID="$check_id"
+  export COMMAND_HINT="$command_hint"
+
+  # Render template with MO
+  local rendered
+  if ! rendered="$("$MO_TOOL" "$template_path" 2>/dev/null)"; then
+    printf "ERROR: Failed to render template with MO\n" >&2
+    return 1
+  fi
+
+  # Write output file
+  mkdir -p "$(dirname "$output_path")"
+  echo "$rendered" > "$output_path"
+
+  # Make executable if bash script
+  if [[ "$extension" == "sh" ]]; then
+    chmod +x "$output_path"
+  fi
+
+  # Output result
+  printf "Generated check: %s\n" "$filename"
+  printf "  Template: %s\n" "$template_id"
+  printf "  Group   : %s\n" "$group"
+  printf "  Service : %s\n" "$service"
+  printf "  Test    : %s\n" "$test_name"
+  printf "  Reminder: Update the placeholder logic before running the orchestrator.\n"
+
+  return 0
 }
+
+
 
 print_check_help() {
   cat <<'EOF'
@@ -254,14 +463,20 @@ handle_check_command() {
   local subcommand="${1:-}"
   shift || true
 
-  ensure_template_tool || return 1
+  ensure_mo_tool || return 1
 
-  local args=()
   local description=""
-  local have_description_flag=false
-  local have_script_type=false
-  local have_template=false
-  local have_output_dir=false
+  local group=""
+  local service=""
+  local test_name=""
+  local script_type="bash"
+  local template_id=""
+  local output_dir="$CHECKS_DIR"
+  local force="false"
+  local dry_run="false"
+  local interactive="false"
+  local json="false"
+  local metadata=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -270,61 +485,101 @@ handle_check_command() {
         return 0
         ;;
       --description|-d)
-        have_description_flag=true
-        args+=("$1")
         shift
         if [[ $# -eq 0 ]]; then
           printf "ERROR: --description requires a value.\n" >&2
           return 1
         fi
-        args+=("$1")
+        description="$1"
+        shift
+        ;;
+      --group)
+        shift
+        if [[ $# -eq 0 ]]; then
+          printf "ERROR: --group requires a value.\n" >&2
+          return 1
+        fi
+        group="$(slugify "$1")"
+        shift
+        ;;
+      --service)
+        shift
+        if [[ $# -eq 0 ]]; then
+          printf "ERROR: --service requires a value.\n" >&2
+          return 1
+        fi
+        service="$(slugify "$1")"
+        shift
+        ;;
+      --test)
+        shift
+        if [[ $# -eq 0 ]]; then
+          printf "ERROR: --test requires a value.\n" >&2
+          return 1
+        fi
+        test_name="$(slugify "$1")"
         shift
         ;;
       --script-type)
-        have_script_type=true
-        args+=("$1")
         shift
         if [[ $# -eq 0 ]]; then
           printf "ERROR: --script-type requires a value.\n" >&2
           return 1
         fi
-        args+=("$1")
+        script_type="$1"
         shift
         ;;
       --template-id)
-        have_template=true
-        args+=("$1")
         shift
         if [[ $# -eq 0 ]]; then
           printf "ERROR: --template-id requires a value.\n" >&2
           return 1
         fi
-        args+=("$1")
+        template_id="$1"
         shift
         ;;
-      --group|--service|--test|--output-dir|--metadata)
-        local flag="$1"
-        args+=("$flag")
+      --output-dir)
         shift
         if [[ $# -eq 0 ]]; then
-          printf "ERROR: %s requires a value.\n" "$flag" >&2
+          printf "ERROR: --output-dir requires a value.\n" >&2
           return 1
         fi
-        args+=("$1")
-        if [[ "$flag" == "--output-dir" ]]; then
-          have_output_dir=true
-        fi
+        output_dir="$1"
         shift
         ;;
-      --dry-run|--force|--interactive|--json)
-        args+=("$1")
+      --metadata)
+        shift
+        if [[ $# -eq 0 ]]; then
+          printf "ERROR: --metadata requires a value.\n" >&2
+          return 1
+        fi
+        metadata="$1"
+        shift
+        ;;
+      --force)
+        force="true"
+        shift
+        ;;
+      --dry-run)
+        dry_run="true"
+        shift
+        ;;
+      --interactive)
+        interactive="true"
+        shift
+        ;;
+      --json)
+        json="true"
         shift
         ;;
       --)
-        args+=("$1")
         shift
         while [[ $# -gt 0 ]]; do
-          args+=("$1")
+          if [[ -z "$description" ]]; then
+            description="$1"
+          else
+            printf "WARNING: Ignoring extra argument '%s' for /check command.\n" "$1" >&2
+          fi
           shift
         done
         break
@@ -344,30 +599,152 @@ handle_check_command() {
     esac
   done
 
-  if [[ -n "$description" && "$have_description_flag" == false ]]; then
-    args+=("--description" "$description")
+  if [[ -z "$description" ]]; then
+    printf "ERROR: Description is required for check generation.\n" >&2
+    printf "Use --description or provide it as the first argument.\n" >&2
+    return 1
   fi
 
-  if [[ "$have_script_type" == false && "$have_template" == false ]]; then
-    args+=("--script-type" "bash")
+  # For now, skip unsupported features
+  if [[ "$dry_run" == "true" ]]; then
+    printf "ERROR: --dry-run not yet implemented in bash version.\n" >&2
+    return 1
   fi
 
-  if [[ "$have_output_dir" == false ]]; then
-    args+=("--output-dir" "$CHECKS_DIR")
+  if [[ "$interactive" == "true" ]]; then
+    printf "ERROR: --interactive not yet implemented in bash version.\n" >&2
+    return 1
   fi
 
-  run_template_tool generate "${args[@]}"
+  if [[ "$json" == "true" ]]; then
+    printf "ERROR: --json not yet implemented in bash version.\n" >&2
+    return 1
+  fi
+
+  if [[ -n "$metadata" ]]; then
+    printf "ERROR: --metadata not yet implemented in bash version.\n" >&2
+    return 1
+  fi
+
+  generate_check_with_mo "$description" "$group" "$service" "$test_name" "$script_type" "$template_id" "$output_dir" "$force"
   return $?
 }
 
 handle_list_templates() {
-  ensure_template_tool || return 1
-  run_template_tool list
+  local registry_file="$TEMPLATES_DIR/registry.json"
+
+  if [[ ! -f "$registry_file" ]]; then
+    printf "ERROR: Template registry not found: %s\n" "$registry_file" >&2
+    return 1
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    printf "ERROR: jq is required for template listing\n" >&2
+    return 1
+  fi
+
+  local version
+  version="$(jq -r '.version' "$registry_file")"
+
+  printf "Template registry version: %s\n" "$version"
+
+  # Process each template
+  local template_count
+  template_count="$(jq '.templates | length' "$registry_file")"
+
+  for ((i=0; i<template_count; i++)); do
+    local id label description script_type extension path categories placeholders
+
+    id="$(jq -r ".templates[$i].id" "$registry_file")"
+    label="$(jq -r ".templates[$i].label // \"$id\"" "$registry_file")"
+    description="$(jq -r ".templates[$i].description // empty" "$registry_file")"
+    script_type="$(jq -r ".templates[$i].script_type" "$registry_file")"
+    extension="$(jq -r ".templates[$i].extension" "$registry_file")"
+    path="$(jq -r ".templates[$i].path" "$registry_file")"
+
+    categories="$(jq -r ".templates[$i].categories | join(\", \")" "$registry_file")"
+    placeholders="$(jq -r ".templates[$i].placeholders | join(\", \")" "$registry_file")"
+
+    printf "\nID: %s\n" "$id"
+    printf "  Label      : %s\n" "$label"
+    if [[ -n "$description" ]]; then
+      printf "  Description: %s\n" "$description"
+    fi
+    printf "  Script Type: %s (.%s)\n" "$script_type" "$extension"
+    printf "  Path       : %s\n" "$path"
+    printf "  Categories : %s\n" "${categories:-(all)}"
+    printf "  Placeholders: %s\n" "$placeholders"
+  done
 }
 
 handle_validate_templates() {
-  ensure_template_tool || return 1
-  run_template_tool validate
+  local registry_file="$TEMPLATES_DIR/registry.json"
+
+  if [[ ! -f "$registry_file" ]]; then
+    printf "ERROR: Template registry not found: %s\n" "$registry_file" >&2
+    return 1
+  fi
+
+  if ! command -v jq >/dev/null 2>&1; then
+    printf "ERROR: jq is required for template validation\n" >&2
+    return 1
+  fi
+
+  local had_issue=false
+  local required_placeholders=("TITLE" "GIVEN" "WHEN" "THEN" "CHECK_ID" "COMMAND_HINT")
+
+  # Process each template
+  local template_count
+  template_count="$(jq '.templates | length' "$registry_file")"
+
+  for ((i=0; i<template_count; i++)); do
+    local id path template_path issues=()
+
+    id="$(jq -r ".templates[$i].id" "$registry_file")"
+    path="$(jq -r ".templates[$i].path" "$registry_file")"
+    template_path="$TEMPLATES_DIR/$path"
+
+    if [[ ! -f "$template_path" ]]; then
+      issues+=("Template file missing: $template_path")
+    else
+      local content
+      content="$(cat "$template_path")"
+
+      # Check for required placeholders
+      local missing=()
+      for placeholder in "${required_placeholders[@]}"; do
+        if ! echo "$content" | grep -q "{{$placeholder}}"; then
+          missing+=("$placeholder")
+        fi
+      done
+
+      if [[ ${#missing[@]} -gt 0 ]]; then
+        issues+=("Missing placeholders: ${missing[*]}")
+      fi
+
+      # Check for GIVEN/WHEN/THEN structure
+      if ! echo "$content" | grep -q "GIVEN" || ! echo "$content" | grep -q "WHEN" || ! echo "$content" | grep -q "THEN"; then
+        issues+=("Does not include GIVEN/WHEN/THEN guidance")
+      fi
+    fi
+
+    if [[ ${#issues[@]} -gt 0 ]]; then
+      printf "Template %s issues:\n" "$id"
+      for issue in "${issues[@]}"; do
+        printf "  - %s\n" "$issue"
+      done
+      had_issue=true
+    else
+      printf "Template %s: OK\n" "$id"
+    fi
+  done
+
+  if [[ "$had_issue" == true ]]; then
+    return 1
+  fi
+
+  printf "All templates validated successfully.\n"
+  return 0
 }
 
 format_result() {

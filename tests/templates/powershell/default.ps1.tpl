@@ -1,17 +1,24 @@
-Param()
-
 # =============================================================================
 # {{TITLE}}
 # =============================================================================
-#
 # GIVEN: {{GIVEN}}
 # WHEN: {{WHEN}}
 # THEN: {{THEN}}
 # =============================================================================
 
-$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RepoRoot = Split-Path -Parent (Split-Path -Parent $ScriptRoot)
+# Constants - declare once, use everywhere
+$TEST_ID = "{{CHECK_ID}}"
+$PASS_MSG = "PASS|$TEST_ID|Success message|{{COMMAND_HINT}}"
+$FAIL_MSG = "FAIL|$TEST_ID|Failure message|{{COMMAND_HINT}}"
+$INFO_MSG = "INFO|$TEST_ID|Info message|{{COMMAND_HINT}}"
+$BROKEN_MSG = "BROKEN|$TEST_ID|Prerequisite missing|{{COMMAND_HINT}}"
 
-# TODO: Implement the actual check logic using the guidance above
+# GIVEN: Prerequisites
+# TODO: Add prerequisite validation here (file existence, defaults, etc.)
 
-Write-Output "INFO|{{CHECK_ID}}|Generated template placeholder - replace with PowerShell validation|{{COMMAND_HINT}}"
+# WHEN: Extract data
+# TODO: Add data extraction logic here
+
+# THEN: Apply business rules and determine outcome
+# TODO: Add qualification logic here
+Write-Output $INFO_MSG

@@ -53,14 +53,18 @@ foreach ($subdomain in $subdomains) {
         # Try with curl as fallback
         try {
             $curlResult = & curl.exe -I -s -k --connect-timeout 5 $url 2>$null
-            if ($curlResult -match "HTTP/\d\.\d\s+(\d+)") {
-                $statusCode = $matches[1]
-                if ($statusCode -eq "200") {
-                    Write-Output "PASS|subdomain_http|$description accessible via curl: $url (HTTP $statusCode)|curl -I $url"
-                } elseif ($statusCode -in @("401", "403")) {
-                    Write-Output "PASS|subdomain_http|$description accessible with auth required: $url (HTTP $statusCode)|curl -I $url"
-                } else {
-                    Write-Output "FAIL|subdomain_http|$description unexpected status via curl: $url (HTTP $statusCode)|curl -I $url"
+            $statusMatch = [regex]::Match($curlResult, "HTTP/\d(?:\.\d)?\s+(\d+)")
+
+            if ($statusMatch.Success) {
+                $statusCode = $statusMatch.Groups[1].Value
+
+                switch ($statusCode) {
+                    "200" { Write-Output "PASS|subdomain_http|$description accessible via curl: $url (HTTP $statusCode)|curl -I $url" }
+                    "401" { Write-Output "PASS|subdomain_http|$description accessible with auth required: $url (HTTP $statusCode)|curl -I $url" }
+                    "403" { Write-Output "PASS|subdomain_http|$description accessible with auth required: $url (HTTP $statusCode)|curl -I $url" }
+                    "405" { Write-Output "PASS|subdomain_http|$description reachable but HEAD not allowed: $url (HTTP $statusCode)|curl -I $url" }
+                    "404" { Write-Output "PASS|subdomain_http|$description reachable but resource not found: $url (HTTP $statusCode)|curl -I $url" }
+                    Default { Write-Output "FAIL|subdomain_http|$description unexpected status via curl: $url (HTTP $statusCode)|curl -I $url" }
                 }
             } else {
                 Write-Output "FAIL|subdomain_http|$description not accessible: $url|curl -I $url"

@@ -1,18 +1,26 @@
 @echo off
-REM =============================================================================
-REM {{TITLE}}
-REM =============================================================================
-REM
-REM GIVEN: {{GIVEN}}
-REM WHEN: {{WHEN}}
-REM THEN: {{THEN}}
-REM =============================================================================
 
-SET SCRIPT_DIR=%~dp0
-PUSHD %SCRIPT_DIR%\..\..
-SET REPO_ROOT=%CD%
-POPD
+:: =============================================================================
+:: {{TITLE}}
+:: =============================================================================
+:: GIVEN: {{GIVEN}}
+:: WHEN: {{WHEN}}
+:: THEN: {{THEN}}
+:: =============================================================================
 
-REM TODO: Implement the actual check logic here
+:: Constants - declare once, use everywhere
+SET TEST_ID={{CHECK_ID}}
+SET PASS_MSG=PASS|%TEST_ID%|Success message|{{COMMAND_HINT}}
+SET FAIL_MSG=FAIL|%TEST_ID%|Failure message|{{COMMAND_HINT}}
+SET INFO_MSG=INFO|%TEST_ID%|Info message|{{COMMAND_HINT}}
+SET BROKEN_MSG=BROKEN|%TEST_ID%|Prerequisite missing|{{COMMAND_HINT}}
 
-ECHO INFO|{{CHECK_ID}}|Generated template placeholder - replace with CMD validation|{{COMMAND_HINT}}
+:: GIVEN: Prerequisites
+:: TODO: Add prerequisite validation here (file existence, defaults, etc.)
+
+:: WHEN: Extract data
+:: TODO: Add data extraction logic here
+
+:: THEN: Apply business rules and determine outcome
+:: TODO: Add qualification logic here
+ECHO %INFO_MSG%

@@ -48,6 +48,37 @@ log_section() {
   printf "\n%s=== %s ===%s\n" "${COLOR_BLUE}" "$1" "${COLOR_RESET}"
 }
 
+current_timestamp() {
+  date +%s.%N
+}
+
+elapsed_time() {
+  local start="$1"
+  local end="$2"
+  awk -v start="$start" -v end="$end" 'BEGIN {
+    diff = end - start;
+    if (diff < 0) {
+      diff = 0;
+    }
+    printf "%.6f", diff;
+  }'
+}
+
+format_duration_label() {
+  local duration="$1"
+  local formatted
+  formatted=$(awk -v value="$duration" 'BEGIN { printf "%.2f", value }')
+
+  local color="$COLOR_GREEN"
+  if awk -v value="$duration" 'BEGIN { exit !(value > 5) }'; then
+    color="$COLOR_RED"
+  elif awk -v value="$duration" 'BEGIN { exit !(value >= 1 && value <= 5) }'; then
+    color="$COLOR_YELLOW"
+  fi
+
+  printf "taken: %s%s s%s" "$color" "$formatted" "$COLOR_RESET"
+}
+
 # Helper function to copy script to Windows temp folder and return Windows path
 copy_to_windows_temp() {
   local script_path="$1"
@@ -101,19 +132,21 @@ run_with_timeout() {
   
   local pid=$!
   local timeout_occurred=false
+  local start_epoch
+  start_epoch=$(date +%s)
   
   # Wait for completion or timeout
-  local count=0
   while kill -0 "$pid" 2>/dev/null; do
-    if [[ $count -ge $timeout_duration ]]; then
+    local now_epoch
+    now_epoch=$(date +%s)
+    if (( now_epoch - start_epoch >= timeout_duration )); then
       timeout_occurred=true
       kill -TERM "$pid" 2>/dev/null
       sleep 1
       kill -KILL "$pid" 2>/dev/null
       break
     fi
-    sleep 1
-    ((count++))
+    sleep 0.1
   done
   
   # Wait for process to finish
@@ -338,28 +371,32 @@ handle_validate_templates() {
 }
 
 format_result() {
-  local status="$1" check="$2" message="$3" command="${4:-}"
+  local status="$1" check="$2" message="$3" command="${4:-}" duration_info="${5:-}"
+  local message_body="$message"
+  if [[ -n "$duration_info" ]]; then
+    message_body+="  ${duration_info}"
+  fi
   
   TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
   
   case "$status" in
     "ENABLED"|"PASS")
-      printf "[%s✓%s] %s: %s\n" "${COLOR_GREEN}" "${COLOR_RESET}" "$check" "$message"
+      printf "[%s✓%s] %s: %s\n" "${COLOR_GREEN}" "${COLOR_RESET}" "$check" "$message_body"
       [[ -n "$command" ]] && printf "    Command: %s%s%s\n" "${COLOR_GRAY}" "$command" "${COLOR_RESET}"
       PASSED_CHECKS=$((PASSED_CHECKS + 1))
       ;;
     "DISABLED"|"INFO")
-      printf "[%sℹ%s] %s: %s\n" "${COLOR_BLUE}" "${COLOR_RESET}" "$check" "$message"
+      printf "[%sℹ%s] %s: %s\n" "${COLOR_BLUE}" "${COLOR_RESET}" "$check" "$message_body"
       [[ -n "$command" ]] && printf "    Command: %s%s%s\n" "${COLOR_GRAY}" "$command" "${COLOR_RESET}"
       INFO_CHECKS=$((INFO_CHECKS + 1))
       ;;
     "BROKEN"|"FAIL")
-      printf "[%s✗%s] %s: %s\n" "${COLOR_RED}" "${COLOR_RESET}" "$check" "$message"
+      printf "[%s✗%s] %s: %s\n" "${COLOR_RED}" "${COLOR_RESET}" "$check" "$message_body"
       [[ -n "$command" ]] && printf "    Command: %s%s%s\n" "${COLOR_GRAY}" "$command" "${COLOR_RESET}"
       FAILED_CHECKS=$((FAILED_CHECKS + 1))
       ;;
     *)
-      printf "[%s?%s] %s: %s (unknown status: %s)\n" "${COLOR_YELLOW}" "${COLOR_RESET}" "$check" "$message" "$status"
+      printf "[%s?%s] %s: %s (unknown status: %s)\n" "${COLOR_YELLOW}" "${COLOR_RESET}" "$check" "$message_body" "$status"
       FAILED_CHECKS=$((FAILED_CHECKS + 1))
       ;;
   esac
@@ -412,8 +449,20 @@ run_bash_script() {
   fi
   
   # Run the check script with timeout and parse output
-  local output
+  local start_time end_time duration_seconds duration_label
+  start_time=$(current_timestamp)
+  local output=""
+  local run_status=0
   if output=$(run_with_timeout "$CHECK_TIMEOUT" "$script_name" "$script_path"); then
+    run_status=0
+  else
+    run_status=$?
+  fi
+  end_time=$(current_timestamp)
+  duration_seconds=$(elapsed_time "$start_time" "$end_time")
+  duration_label=$(format_duration_label "$duration_seconds")
+
+  if [[ $run_status -eq 0 ]]; then
     # Parse each line of output (some scripts may output multiple results)
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
@@ -425,10 +474,10 @@ run_bash_script() {
         local message="${BASH_REMATCH[3]}"
         local command="${BASH_REMATCH[5]:-}"
         
-        format_result "$status" "$check" "$message" "$command"
+        format_result "$status" "$check" "$message" "$command" "$duration_label"
       else
         # Handle non-standard output
-        format_result "BROKEN" "$script_name" "Invalid output format: $line" "$script_path"
+        format_result "BROKEN" "$script_name" "Invalid output format: $line" "$script_path" "$duration_label"
       fi
     done <<< "$output"
   else
@@ -442,13 +491,13 @@ run_bash_script() {
           local check="${BASH_REMATCH[2]}"
           local message="${BASH_REMATCH[3]}"
           local command="${BASH_REMATCH[5]:-}"
-          format_result "$status" "$check" "$message" "$command"
+          format_result "$status" "$check" "$message" "$command" "$duration_label"
         fi
       done <<< "$output"
       # Don't return error for timeout - it's just another check result
       return 0
     else
-      format_result "BROKEN" "$script_name" "Check script failed to execute: ${output:0:100}" "$script_path"
+      format_result "BROKEN" "$script_name" "Check script failed to execute: ${output:0:100}" "$script_path" "$duration_label"
       return 1
     fi
   fi
@@ -481,8 +530,20 @@ run_powershell_script() {
   local windows_path
   if windows_path=$(copy_to_windows_temp "$script_path"); then
     # Run PowerShell script with timeout and parse output
-    local output
+    local start_time end_time duration_seconds duration_label
+    start_time=$(current_timestamp)
+    local output=""
+    local run_status=0
     if output=$(run_with_timeout "$CHECK_TIMEOUT" "$script_name" powershell.exe -ExecutionPolicy Bypass -File "$windows_path"); then
+      run_status=0
+    else
+      run_status=$?
+    fi
+    end_time=$(current_timestamp)
+    duration_seconds=$(elapsed_time "$start_time" "$end_time")
+    duration_label=$(format_duration_label "$duration_seconds")
+
+    if [[ $run_status -eq 0 ]]; then
       # Parse each line of output
       while IFS= read -r line; do
         [[ -z "$line" ]] && continue
@@ -496,10 +557,10 @@ run_powershell_script() {
           local message="${BASH_REMATCH[3]}"
           local command="${BASH_REMATCH[5]:-}"
           
-          format_result "$status" "$check" "$message" "$command"
+          format_result "$status" "$check" "$message" "$command" "$duration_label"
         else
           # Handle non-standard output
-          format_result "BROKEN" "$script_name" "Invalid output format: $line" "powershell.exe -File $windows_path"
+          format_result "BROKEN" "$script_name" "Invalid output format: $line" "powershell.exe -File $windows_path" "$duration_label"
         fi
       done <<< "$output"
     else
@@ -514,13 +575,13 @@ run_powershell_script() {
             local check="${BASH_REMATCH[2]}"
             local message="${BASH_REMATCH[3]}"
             local command="${BASH_REMATCH[5]:-}"
-            format_result "$status" "$check" "$message" "$command"
+            format_result "$status" "$check" "$message" "$command" "$duration_label"
           fi
         done <<< "$output"
         # Don't return error for timeout - it's just another check result
         return 0
       else
-        format_result "BROKEN" "$script_name" "PowerShell script failed: ${output:0:100}" "powershell.exe -File $windows_path"
+        format_result "BROKEN" "$script_name" "PowerShell script failed: ${output:0:100}" "powershell.exe -File $windows_path" "$duration_label"
         return 1
       fi
     fi
@@ -564,8 +625,20 @@ run_cmd_script() {
   local windows_path
   if windows_path=$(copy_to_windows_temp "$script_path"); then
     # Run CMD script with timeout and parse output
-    local output
+    local start_time end_time duration_seconds duration_label
+    start_time=$(current_timestamp)
+    local output=""
+    local run_status=0
     if output=$(run_with_timeout "$CHECK_TIMEOUT" "$script_name" cmd.exe /c "$windows_path"); then
+      run_status=0
+    else
+      run_status=$?
+    fi
+    end_time=$(current_timestamp)
+    duration_seconds=$(elapsed_time "$start_time" "$end_time")
+    duration_label=$(format_duration_label "$duration_seconds")
+
+    if [[ $run_status -eq 0 ]]; then
       # Parse each line of output
       while IFS= read -r line; do
         [[ -z "$line" ]] && continue
@@ -579,10 +652,10 @@ run_cmd_script() {
           local message="${BASH_REMATCH[3]}"
           local command="${BASH_REMATCH[5]:-}"
           
-          format_result "$status" "$check" "$message" "$command"
+          format_result "$status" "$check" "$message" "$command" "$duration_label"
         else
           # Handle non-standard output
-          format_result "BROKEN" "$script_name" "Invalid output format: $line" "cmd.exe /c $windows_path"
+          format_result "BROKEN" "$script_name" "Invalid output format: $line" "cmd.exe /c $windows_path" "$duration_label"
         fi
       done <<< "$output"
     else
@@ -597,13 +670,13 @@ run_cmd_script() {
             local check="${BASH_REMATCH[2]}"
             local message="${BASH_REMATCH[3]}"
             local command="${BASH_REMATCH[5]:-}"
-            format_result "$status" "$check" "$message" "$command"
+            format_result "$status" "$check" "$message" "$command" "$duration_label"
           fi
         done <<< "$output"
         # Don't return error for timeout - it's just another check result
         return 0
       else
-        format_result "BROKEN" "$script_name" "CMD script failed: ${output:0:100}" "cmd.exe /c $windows_path"
+        format_result "BROKEN" "$script_name" "CMD script failed: ${output:0:100}" "cmd.exe /c $windows_path" "$duration_label"
         return 1
       fi
     fi

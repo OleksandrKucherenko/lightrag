@@ -4,100 +4,58 @@ set -Eeuo pipefail
 # =============================================================================
 # Qdrant API Security Check
 # =============================================================================
-#
 # GIVEN: A Qdrant instance that may have API key protection
 # WHEN: We test API access with and without authentication
 # THEN: We determine if API security is ENABLED, DISABLED, or BROKEN
 # =============================================================================
 
-# Load environment
+source "${CHECK_TOOLS:-"tests/tools"}/action-framework.sh"
+source "${CHECK_TOOLS:-"tests/tools"}/checks-probes.sh"
+
+# Constants - declare once, use everywhere
+readonly TEST_ID="qdrant_api"
+readonly ENABLED_MSG="ENABLED|${TEST_ID}|API key protection working|docker run --rm --network container:vectors alpine/curl:latest -s -o /dev/null -w '%{http_code}' --connect-timeout 5 -H 'api-key: \$QDRANT_API_KEY' http://localhost:6333/collections"
+readonly DISABLED_MSG="DISABLED|${TEST_ID}|No API key configured - open access|docker run --rm --network container:vectors alpine/curl:latest -s --connect-timeout 5 http://localhost:6333/collections"
+readonly BROKEN_CONTAINER="BROKEN|${TEST_ID}|Qdrant container not found|docker compose ps vectors"
+readonly BROKEN_NOAUTH="BROKEN|${TEST_ID}|API key set but no protection active|docker run --rm --network container:vectors alpine/curl:latest -s --connect-timeout 5 http://localhost:6333/collections"
+readonly BROKEN_INVALID="BROKEN|${TEST_ID}|No API key set but invalid response|docker run --rm --network container:vectors alpine/curl:latest -s --connect-timeout 5 http://localhost:6333/collections"
+readonly BROKEN_CONNECT="BROKEN|${TEST_ID}|Cannot connect to Qdrant|docker run --rm --network container:vectors alpine/curl:latest -s --connect-timeout 5 http://localhost:6333/collections"
+readonly BROKEN_AUTHFAIL="BROKEN|${TEST_ID}|API key auth failed|docker run --rm --network container:vectors alpine/curl:latest -s -o /dev/null -w '%{http_code}' --connect-timeout 5 -H 'api-key: \$QDRANT_API_KEY' http://localhost:6333/collections"
+
+# GIVEN: Load environment and check prerequisites
 QDRANT_API_KEY="${QDRANT_API_KEY:-}"
-PUBLISH_DOMAIN="${PUBLISH_DOMAIN:-dev.localhost}"
 CURL_TIMEOUT="${CURL_TIMEOUT:-5}"
-CURL_HELPER_IMAGE="${CURL_HELPER_IMAGE:-alpine/curl:latest}"
 
-# Check if Qdrant container is running
-if ! docker compose ps -q vectors >/dev/null 2>&1; then
-    printf '%s\n' "BROKEN|qdrant_api|Qdrant container not found|docker compose ps vectors"
-    exit 0
-fi
+# WHEN: Check if Qdrant container is running
+CONTAINER_RUNNING=$(probe_docker_service_running "vectors" && echo "true" || echo "false")
 
-# Pull helper image if needed so docker run doesn't flood output with progress
-if ! docker image inspect "$CURL_HELPER_IMAGE" >/dev/null 2>&1; then
-    if ! docker pull --quiet "$CURL_HELPER_IMAGE" >/dev/null 2>&1; then
-        printf '%s\n' "BROKEN|qdrant_api|Unable to pull helper image $CURL_HELPER_IMAGE|docker pull $CURL_HELPER_IMAGE"
-        exit 0
-    fi
-fi
+# THEN: Exit early if container not running
+[[ "$CONTAINER_RUNNING" == "false" ]] && { echo "$BROKEN_CONTAINER"; exit 0; }
 
-base_url="http://localhost:6333"
-helper_cmd="docker run --rm --network container:vectors $CURL_HELPER_IMAGE"
-
-trim_whitespace() {
-    local value="$1"
-    value="${value#${value%%[![:space:]]*}}"
-    value="${value%${value##*[![:space:]]}}"
-    printf '%s' "$value"
-}
-
-run_helper_for_status() {
-    local __code_var="$1"
-    local __error_var="$2"
-    shift 2
-
-    local output
-    if output=$(docker run --rm --network container:vectors "$CURL_HELPER_IMAGE" -sS -o /dev/null -w '%{http_code}' --connect-timeout "$CURL_TIMEOUT" "$@" 2>&1); then
-        printf -v "$__code_var" '%s' "$output"
-        printf -v "$__error_var" '%s' ""
-        return 0
-    else
-        output=$(trim_whitespace "$output")
-        printf -v "$__code_var" '%s' "000"
-        printf -v "$__error_var" '%s' "$output"
-        return 1
-    fi
-}
-
+# WHEN: Test API access based on key configuration
 if [[ -z "$QDRANT_API_KEY" ]]; then
-    # WHEN: No API key is configured
-    # THEN: Qdrant should be accessible without authentication (DISABLED state)
+    # No API key configured - test unauthenticated access
+    COLLECTIONS_RESULT=$(clean_output "$(probe_qdrant_collections)")
+    COLLECTIONS_SUCCESS=$([[ "$COLLECTIONS_RESULT" != "COLLECTIONS_FAILED" ]] && echo "true" || echo "false")
 
-    if result=$(docker run --rm --network container:vectors "$CURL_HELPER_IMAGE" -sS --connect-timeout "$CURL_TIMEOUT" "$base_url/collections" 2>&1); then
-        if echo "$result" | jq . >/dev/null 2>&1; then
-            echo "DISABLED|qdrant_api|No API key configured - open access|docker run --rm --network container:vectors alpine/curl:latest curl -s $base_url/collections"
-            printf '%s\n' "DISABLED|qdrant_api|No API key configured - open access|$helper_cmd -s --connect-timeout $CURL_TIMEOUT ${base_url}/collections"
-        else
-            preview="${result:0:80}"
-            printf '%s\n' "BROKEN|qdrant_api|No API key set but invalid response: ${preview}|$helper_cmd -s --connect-timeout $CURL_TIMEOUT ${base_url}/collections"
-        fi
+    if [[ "$COLLECTIONS_SUCCESS" == "true" ]]; then
+        echo "$DISABLED_MSG"
     else
-        error_message=$(trim_whitespace "$result")
-        if [[ -z "$error_message" ]]; then
-            error_message="Unable to reach Qdrant"
-        fi
-        printf '%s\n' "BROKEN|qdrant_api|Cannot connect to Qdrant: ${error_message}|$helper_cmd -s --connect-timeout $CURL_TIMEOUT ${base_url}/collections"
+        echo "$BROKEN_CONNECT"
     fi
 else
-    # WHEN: API key is configured
-    # THEN: Test both unauthenticated (should fail) and authenticated (should work)
+    # API key configured - test both authenticated and unauthenticated access
+    UNAUTH_RESULT=$(clean_output "$(probe_qdrant_collections vectors "")")
+    AUTH_RESULT=$(clean_output "$(probe_qdrant_collections vectors "$QDRANT_API_KEY")")
 
-    unauth_code=""
-    unauth_error=""
-    run_helper_for_status unauth_code unauth_error "$base_url/collections" || true
+    UNAUTH_SUCCESS=$([[ "$UNAUTH_RESULT" != "COLLECTIONS_FAILED" ]] && echo "true" || echo "false")
+    AUTH_SUCCESS=$([[ "$AUTH_RESULT" != "COLLECTIONS_FAILED" ]] && echo "true" || echo "false")
 
-    auth_code=""
-    auth_error=""
-    run_helper_for_status auth_code auth_error -H "api-key: ${QDRANT_API_KEY}" "$base_url/collections" || true
-
-    if [[ "$unauth_code" =~ ^(401|403)$ ]] && [[ "$auth_code" == "200" ]]; then
-        printf '%s\n' "ENABLED|qdrant_api|API key protection working|$helper_cmd -s -o /dev/null -w '%{http_code}' --connect-timeout $CURL_TIMEOUT -H 'api-key: \$QDRANT_API_KEY' ${base_url}/collections"
-    elif [[ "$unauth_code" == "200" ]]; then
-        printf '%s\n' "BROKEN|qdrant_api|API key set but no protection active|$helper_cmd -s --connect-timeout $CURL_TIMEOUT ${base_url}/collections"
+    if [[ "$UNAUTH_SUCCESS" == "false" ]] && [[ "$AUTH_SUCCESS" == "true" ]]; then
+        echo "$ENABLED_MSG"
+    elif [[ "$UNAUTH_SUCCESS" == "true" ]]; then
+        echo "$BROKEN_NOAUTH"
     else
-        details="unauth=${unauth_code}"
-        [[ -n "$unauth_error" ]] && details+=" (${unauth_error})"
-        details+="; auth=${auth_code}"
-        [[ -n "$auth_error" ]] && details+=" (${auth_error})"
-        printf '%s\n' "BROKEN|qdrant_api|API key auth failed (${details})|$helper_cmd -s -o /dev/null -w '%{http_code}' --connect-timeout $CURL_TIMEOUT -H 'api-key: \$QDRANT_API_KEY' ${base_url}/collections"
+        echo "$BROKEN_AUTHFAIL"
     fi
 fi

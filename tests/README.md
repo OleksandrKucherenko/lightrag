@@ -217,7 +217,20 @@ The orchestrator automatically discovers and runs your new check based on the fi
 # Service : python
 # Test    : deprecation
 # Reminder: Update the placeholder logic before running the orchestrator.
+
+# Alternative Way:
+CHECK_ID="" TITLE="" GIVEN="" WHEN="" THEN="" COMMAND_HINT="" \
+  ./tests/tools/mo.sh ./tests/templates/bash/default.sh.tpl
 ```
+
+But with environment variables set for template placeholders:
+
+- `TITLE` - Generated title from group/service/test names
+- `GIVEN` - Extracted from the description's TDD structure
+- `WHEN` - Extracted from the description's TDD structure
+- `THEN` - Extracted from the description's TDD structure
+- `CHECK_ID` - Combination of group_service_test (e.g., security_python_deprecation)
+- `COMMAND_HINT` - Script-type specific placeholder (e.g., replace_with_command for bash)
 
 ## 🎨 GIVEN/WHEN/THEN Structure
 

@@ -6,5 +6,21 @@
         "mkcert",
         "qdrant",
         "rops"
-    ]
+    ],
+    // set WSL as default terminal in VSCode
+    "terminal.integrated.defaultProfile.windows": "WSL",
+    "terminal.integrated.profiles.windows": {
+        "WSL": {
+        "path": "C:\\Windows\\System32\\wsl.exe",
+        "args": ["-d", "Ubuntu"]              // match the distro you use
+        }
+    },
+    "remote.WSL.recommendations": ["ms-vscode-remote.remote-wsl"],
+    // enable good font with icons support
+    "terminal.integrated.fontFamily": "Cascadia Code NF",
+    "terminal.integrated.fontWeight": "100",
+    "terminal.integrated.fontSize": 15,
+    "debug.javascript.defaultRuntimeExecutable": {
+        "pwa-node": "/home/developer/.local/share/mise/shims/node"
+    },
 }

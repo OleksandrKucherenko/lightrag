@@ -1,5 +1,58 @@
 name: lightrag
 
+x-logging-default: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-healthcheck-default: &default-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 30s
+
+x-deploy-small: &deploy-small
+  resources:
+    limits:
+      memory: 1G
+      cpus: '0.5'
+    reservations:
+      memory: 512M
+      cpus: '0.25'
+
+x-deploy-medium: &deploy-medium
+  resources:
+    limits:
+      memory: 4G
+      cpus: '2.0'
+    reservations:
+      memory: 2G
+      cpus: '1.0'
+
+x-deploy-large: &deploy-large
+  resources:
+    limits:
+      memory: 8G
+      cpus: '4.0'
+    reservations:
+      memory: 4G
+      cpus: '2.0'
+
+x-ulimits-unlimited: &ulimits-unlimited
+  memlock:
+    soft: -1
+    hard: -1
+  nofile:
+    soft: 65536
+    hard: 65536
+
+x-volume-bind: &volume-bind
+  driver: local
+  driver_opts: &volume-bind-opts
+    type: none
+    o: bind
+
 services:
   # Caddy Reverse Proxy with Docker Provider
   proxy:
@@ -13,33 +66,28 @@ services:
       - 443:443/tcp
       - 443:443/udp
     env_file:
+      - .env
       - .env.caddy
     volumes:
       # access to docker socket for capturing services config
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker/certificates:/ssl:ro
       - caddy_data:/data
       - caddy_config:/config
-      - ./docker/ssl:/certificates:ro
     networks:
       - frontend
       - backend
     labels:
-      caddy: "https://dev.localhost"
+      caddy: "https://${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.respond: "/health \"OK\" 200"
       caddy.respond_1: "/debug \"Environment: local.dev development\" 200"
       caddy.respond_2: "/* \"LightRAG Local Development Stack\" 200"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
     healthcheck:
+      <<: *default-healthcheck
       test: [ "CMD", "/bin/caddy", "validate", "--config", "/config/caddy/Caddyfile" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+    deploy: *deploy-small
+    logging: *default-logging
 
   # LazyDocker Web UI - Docker Fleet Management
   monitor:
@@ -62,30 +110,16 @@ services:
       - proxy
     labels:
       # Caddy labels for Isaiah web interface
-      caddy: "https://monitor.dev.localhost"
+      caddy: "https://monitor.${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.reverse_proxy: "{{upstreams 3000}}"
       caddy.basic_auth: "*"
       caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
-    # deploy:
-    #   resources:
-    #     limits:
-    #       memory: 256M
-    #       cpus: '0.3'
-    #     reservations:
-    #       memory: 128M
-    #       cpus: '0.1'
     healthcheck:
+      <<: *default-healthcheck
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "5m"
-        max-file: "2"
+    deploy: *deploy-small
+    logging: *default-logging
 
   # Redis - KV Storage & Document Status Storage
   kv:
@@ -93,59 +127,42 @@ services:
     image: redis:8-alpine
     container_name: kv
     restart: unless-stopped
-    user: "999:999"
-    read_only: true
     labels:
       # Caddy labels for Redis web interface
-      caddy: "https://kv.dev.localhost"
+      caddy: "https://kv.${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.reverse_proxy: "{{upstreams 6379}}"
     depends_on:
       - proxy
-    tmpfs:
-      - /tmp
-      - /var/run
     env_file:
       - .env
       - .env.databases
     ports:
       - 6379:6379
-    command: >
-      redis-server --appendonly yes --appendfsync everysec --save 900 1 --save 300 10 --save 60 10000 --maxmemory 1gb --maxmemory-policy allkeys-lru --tcp-keepalive 300 --timeout 300 --requirepass ${REDIS_PASSWORD}
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
     networks:
       - backend
     healthcheck:
+      <<: *default-healthcheck
       test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '0.5'
-        reservations:
-          memory: 512M
-          cpus: '0.25'
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    deploy: *deploy-small
+    logging: *default-logging
 
   # Memgraph - Graph Storage
   graph:
     # ref: https://hub.docker.com/r/memgraph/memgraph-mage
-    image: memgraph/memgraph-mage:latest
+    # ref2: https://hub.docker.com/r/memgraph/memgraph - smaller image
+    image: memgraph/memgraph:latest
     container_name: graph
     restart: unless-stopped
     env_file:
       - .env
       - .env.databases
+    # No authentication for internal services
     command: >
-      --log-level=WARNING --also-log-to-stderr=true --memory-limit=4096 --storage-properties-on-edges=true --storage-snapshot-interval-sec=300 --storage-wal-enabled=true --data-recovery-on-startup=true --telemetry-enabled=false
+      --log-level=WARNING --memory-limit=4096 --data-recovery-on-startup=true --telemetry-enabled=false
     volumes:
       - memgraph_data:/var/lib/memgraph
       - memgraph_log:/var/log/memgraph
@@ -154,66 +171,41 @@ services:
     ports:
       - 7687:7687
     healthcheck:
-      test: [ "CMD-SHELL", "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 --use-ssl=false || exit 1" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 45s
-    deploy:
-      resources:
-        limits:
-          memory: 8G
-          cpus: '4.0'
-        reservations:
-          memory: 4G
-          cpus: '2.0'
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      <<: *default-healthcheck
+      test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/7687' || exit 1
+      # test: [ "CMD-SHELL", "echo 'RETURN 0;' | mgconsole --host 127.00.0.1 --port 7687 || exit 1" ]
+    ulimits: *ulimits-unlimited
+    deploy: *deploy-large
+    logging: *default-logging
 
   # Memgraph Lab (Web UI for graph visualization)
   graph-ui:
     # ref: https://hub.docker.com/r/memgraph/lab
-    image: memgraph/lab:3.5.0
+    image: memgraph/lab:latest
     container_name: graph-ui
     restart: unless-stopped
     env_file:
       - .env
       - .env.databases
+    environment:
+      - QUICK_CONNECT_MG_HOST=graph
     networks:
       - backend
     ports:
       - 3090:3000
     labels:
       # Caddy labels for automatic subdomain routing
-      caddy: "https://graph.dev.localhost"
+      caddy: "https://graph.${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.reverse_proxy: "{{upstreams 3000}}"
-      # caddy.basic_auth: "*"
-      # caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
     depends_on:
       - proxy
       - graph
     healthcheck:
+      <<: *default-healthcheck
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: '0.5'
+    deploy: *deploy-small
+    logging: *default-logging
 
   # Qdrant - Vector Storage
   vectors:
@@ -222,7 +214,7 @@ services:
     container_name: vectors
     restart: unless-stopped
     depends_on:
-      - kv
+      - proxy
     env_file:
       - .env
       - .env.databases
@@ -236,30 +228,14 @@ services:
       - 6334:6334
     labels:
       # Caddy labels for automatic subdomain routing
-      caddy: "https://vector.dev.localhost"
+      caddy: "https://vector.${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.reverse_proxy: "{{upstreams 6333}}"
-      # caddy.basic_auth: "*"
-      # caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
     healthcheck:
+      <<: *default-healthcheck
       test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '2.0'
-        reservations:
-          memory: 2G
-          cpus: '1.0'
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+    deploy: *deploy-medium
+    logging: *default-logging
 
   # Light RAG
   rag:
@@ -289,64 +265,62 @@ services:
       - 9080:9621
     labels:
       # Caddy labels for automatic subdomain routing
-      caddy: "https://rag.dev.localhost"
+      caddy: "https://rag.${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
       caddy.reverse_proxy: "{{upstreams 9621}}"
-      # caddy.basic_auth: "*"
-      # caddy.basic_auth.admin: "${MONITOR_BASIC_AUTH_HASH}"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      # Additional API subdomain for LobeChat integration (eliminates CORS)
+      caddy_1: "https://api.${PUBLISH_DOMAIN}"
+      caddy_1.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
+      caddy_1.reverse_proxy: "{{upstreams 9621}}"
+      # Let LightRAG handle CORS internally, just route the traffic
+      caddy_1.header: "-Server"
+    healthcheck:
+      <<: *default-healthcheck
+      test: timeout 10s bash -c ':> /dev/tcp/127.0.0.1/9621' || exit 1
+    deploy: *deploy-medium
+    logging: *default-logging
 
-  # Open WebUI Frontend
-  webui:
-    # ref: https://github.com/open-webui/open-webui
-    image: ghcr.io/open-webui/open-webui:main
-    container_name: webui
+  # LobeChat Frontend
+  lobechat:
+    # ref: https://github.com/lobehub/lobe-chat
+    image: lobehub/lobe-chat:latest
+    container_name: lobechat
     restart: unless-stopped
     depends_on:
       - proxy
       - rag
       - kv
-      - vectors
     env_file:
       - .env
-      - .env.openwebui
+      - .env.lobechat
     environment:
-      - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL:-admin@lightrag.local}
+      - DATABASE_URL=redis://:${REDIS_PASSWORD}@kv:6379/2
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@kv:6379/3
+      - OLLAMA_PROXY_URL=http://rag:9621
+      - OPENAI_API_KEY=${LIGHTRAG_API_KEY}
+      - ACCESS_CODE=${LOBECHAT_ACCESS_CODE:-}
+      - NODE_OPTIONS=--max_old_space_size=2048
     volumes:
-      - openwebui_data:/app/backend/data
+      - lobechat_data:/app/.next
     networks:
       - frontend
       - backend
     ports:
-      - 3000:8080
+      - 3210:3210
     labels:
-      # Caddy labels for automatic subdomain routing
-      caddy: "https://webui.dev.localhost"
-      caddy.reverse_proxy: "{{upstreams 8080}}"
-      caddy.tls: "/certificates/dev.localhost.pem /certificates/dev.localhost-key.pem"
+      # Caddy labels for automatic subdomain routing - using 'chat' subdomain
+      caddy: "https://chat.${PUBLISH_DOMAIN}"
+      caddy.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
+      caddy.reverse_proxy: "{{upstreams 3210}}"
+      # Alternative lobechat subdomain for backward compatibility
+      caddy_1: "https://lobechat.${PUBLISH_DOMAIN}"
+      caddy_1.tls: "/ssl/dev.localhost.pem /ssl/dev.localhost-key.pem"
+      caddy_1.reverse_proxy: "{{upstreams 3210}}"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-          cpus: '1.0'
-        reservations:
-          memory: 1G
-          cpus: '0.5'
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      <<: *default-healthcheck
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3210/" ]
+    deploy: *deploy-small
+    logging: *default-logging
 
 networks:
   frontend:
@@ -366,75 +340,64 @@ networks:
 volumes:
   # Caddy
   caddy_data:
-    driver: local
+    <<: *volume-bind
     driver_opts:
-      type: none
-      o: bind
+      <<: *volume-bind-opts
       # Caddy will automatically create sub-folder 
       device: ./docker/data
   caddy_config:
-    driver: local
+    <<: *volume-bind
     driver_opts:
-      type: none
-      o: bind
+      <<: *volume-bind-opts
       # Caddy will automatically create sub-folder 
       device: ./docker/etc
   # Application Data
   redis_data:
-    driver: local
+    <<: *volume-bind
     driver_opts:
-      type: none
-      o: bind
+      <<: *volume-bind-opts
       device: ./docker/data/redis
   # Graph
   memgraph_data:
-    driver: local
+    <<: *volume-bind
     driver_opts:
-      type: none
-      o: bind
+      <<: *volume-bind-opts
       device: ./docker/data/memgraph
   memgraph_log:
-    driver: local
+    <<: *volume-bind
     driver_opts:
-      type: none
-      o: bind
+      <<: *volume-bind-opts
       device: ./docker/logs/memgraph
   # QDRANT Vector
   qdrant_storage:
-    driver: local
+    <<: *volume-bind
     driver_opts:
-      type: none
-      o: bind
+      <<: *volume-bind-opts
       device: ./docker/data/qdrant/storage
   qdrant_snapshots:
-    driver: local
+    <<: *volume-bind
     driver_opts:
-      type: none
-      o: bind
+      <<: *volume-bind-opts
       device: ./docker/data/qdrant/snapshots
   # Rag
   lightrag_storage:
-    driver: local
+    <<: *volume-bind
     driver_opts:
-      type: none
-      o: bind
+      <<: *volume-bind-opts
       device: ./docker/data/lightrag/storage
   lightrag_inputs:
-    driver: local
+    <<: *volume-bind
     driver_opts:
-      type: none
-      o: bind
+      <<: *volume-bind-opts
       device: ./docker/data/lightrag/inputs
   lightrag_logs:
-    driver: local
+    <<: *volume-bind
     driver_opts:
-      type: none
-      o: bind
+      <<: *volume-bind-opts
       device: ./docker/logs/lightrag
-  # OpenWebUI Data
-  openwebui_data:
-    driver: local
+  # LobeChat Data
+  lobechat_data:
+    <<: *volume-bind
     driver_opts:
-      type: none
-      o: bind
-      device: ./docker/data/openwebui
+      <<: *volume-bind-opts
+      device: ./docker/data/lobechat

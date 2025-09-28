@@ -24,5 +24,18 @@ docker/logs/lightrag/*
 # Secrets
 .secrets/
 
-# OpenWeb UI
-docker/data/openwebui/*
+# LobeChat UI
+docker/data/lobechat/*
+
+# temporary/debug files
+*.log
+*.~*~
+*.*~
+
+# LLM spec-kit
+!.kilocode/
+
+.opencode/
+.windsurf/workflows
+.codex/
+specs/

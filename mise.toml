@@ -15,31 +15,7 @@ _.file = [".env.secrets.json", ".env"]
 
 [tasks.setup]
 description = "Pre-configure project folders"
-run = [
-    # security storage folder
-    "mkdir -p .secrets",
-    # caddy
-    "mkdir -p docker/data/caddy",
-    "mkdir -p docker/etc/caddy",
-    # kv
-    "mkdir -p docker/data/redis",
-    # graph
-    "mkdir -p docker/data/memgraph",
-    "mkdir -p docker/logs/memgraph",
-    # vectors
-    "mkdir -p docker/data/qdrant/storage",
-    "mkdir -p docker/data/qdrant/snapshots",
-    # rag
-    "mkdir -p docker/data/lightrag/storage",
-    "mkdir -p docker/data/lightrag/inputs",
-    "mkdir -p docker/logs/lightrag",
-    # webui
-    "mkdir -p docker/data/lobechat",
-    # LLM/IDE folders
-    "mkdir -p .windsurf .opencode",
-    "[ ! -d .windsurf ] && ln -s $(pwd)/.kilocode/workflows .windsurf/workflows",
-    "[ ! -d .opencode ] && ln -s $(pwd)/.kilocode/workflows .opencode/command",
-]
+run = ["./bin/00-setup-folders.sh"]
 
 [tasks.hosts-update]
 description = "Update /etc/hosts with resolved PUBLISH_DOMAIN using hostctl"
@@ -61,16 +37,17 @@ run = "sudo hostctl remove lightrag"
 [tasks.hosts-update-windows]
 description = "Update Windows hosts file from WSL2 using PowerShell and hostctl"
 run = '''
-echo "detecting docker host ip... (it is slow, wait please)"
-export TEMP="/mnt/c/tmp/.etchosts.lightrag.windows"
-export HOST_IP=$(bin/get-host-ip.sh)
-export PUBLISH_DOMAIN=${PUBLISH_DOMAIN:-dev.localhost}
-echo "HOST_IP: $HOST_IP" "$PUBLISH_DOMAIN"
-envsubst < .etchosts > "$TEMP"
-echo "Asking for Admin Permissions..."
-export WIN_TMP="C:\\tmp\\.etchosts.lightrag.windows"
-powershell.exe -NoProfile -Command "sudo hostctl replace lightrag --from $WIN_TMP"
-echo "Updated Windows hosts from: $TEMP (C:\\\\tmp\\.etchosts.lightrag.windows)"
+    echo "Detecting docker host ip... (it is slow, wait please)"
+    export TEMP="/mnt/c/tmp/.etchosts.lightrag.windows"
+    export HOST_IP=$(bin/get-host-ip.sh)
+    export PUBLISH_DOMAIN=${PUBLISH_DOMAIN:-dev.localhost}
+    echo "HOST_IP: $HOST_IP" "$PUBLISH_DOMAIN"
+    envsubst < .etchosts > "$TEMP"
+    echo "Asking for Admin Permissions..."
+    export WIN_TMP="C:\\tmp\\.etchosts.lightrag.windows"
+    powershell.exe -NoProfile -Command "sudo hostctl replace lightrag --from $WIN_TMP"
+    echo "Updated Windows hosts from: $TEMP (C:\\\\tmp\\.etchosts.lightrag.windows)"
+    powershell.exe -NoProfile -Command "hostctl list lightrag"
 '''
 
 [hooks]

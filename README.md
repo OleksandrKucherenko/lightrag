@@ -46,6 +46,16 @@
     - [Deprecated Documentation](#deprecated-documentation)
   - [LLM Helper](#llm-helper)
 
+---
+
+| Web UI Preview (LightRAG)       | Web UI Preview (Atlas)                    | Web UI Preview (LobeChat)                  |
+| ------------------------------- | ----------------------------------------- | ------------------------------------------ |
+| ![](./docs/lightrag-web-ui.png) | ![](./docs/docker-setup-web-atlas-ui.png) | ![](./docs/lobechat-integrated-rag-ui.png) |
+
+| Web UI Preview (Chat Setup)                           | Web UI Preview (MemGraph)       | Web UI Preview (QDrant)       |
+| ----------------------------------------------------- | ------------------------------- | ----------------------------- |
+| ![](./docs/lobechat-rag-llm-setup-via-ollama-api.jpg) | ![](./docs/memgraph-lab-ui.png) | ![](./docs/qdrant-web-ui.png) |
+
 
 ## LightRAG Local Development Stack
 

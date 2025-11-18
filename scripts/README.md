@@ -4,6 +4,59 @@ This directory contains utility scripts for managing the LightRAG deployment.
 
 ## Available Scripts
 
+### estimate-costs.sh
+
+**Purpose**: Estimate monthly/yearly Kubernetes costs across multiple cloud providers
+
+**Usage**:
+```bash
+# Show current configuration costs
+./scripts/estimate-costs.sh
+
+# PR mode: compare with base branch
+./scripts/estimate-costs.sh --pr main
+
+# Show help
+./scripts/estimate-costs.sh --help
+```
+
+**What it does**:
+- Analyzes Helm values.yaml to extract CPU, RAM, and storage requirements
+- Calculates estimated costs for 5 cloud providers:
+  - AWS EKS
+  - Azure AKS
+  - GCP GKE
+  - DigitalOcean DOKS
+  - Civo
+- Shows daily, monthly, and yearly cost projections
+- In PR mode: compares costs with base branch and shows deltas
+
+**Example output**:
+```
+Resources:
+  CPU:     5.00 cores
+  RAM:     10 GB
+  Storage: 87 GB
+
+Monthly Cost Estimates (USD):
+Provider                  Compute      Storage      Control        Total       Yearly
+AWS (EKS)                 $228.10        $8.70       $72.00      $308.80     $3705.60
+Azure (AKS)               $328.15       $13.05        $0.00      $341.20     $4094.40
+GCP (GKE)                 $337.50       $14.79       $73.00      $425.29     $5103.48
+DigitalOcean (DOKS)       $120.00        $8.70        $0.00      $128.70     $1544.40
+Civo                       $75.00        $4.35        $0.00       $79.35      $952.20
+```
+
+**GitHub Actions Integration**:
+Automatically runs on PRs when `helm/lightrag/values.yaml` or `k8s/*.yaml` files change. Posts cost analysis as PR comment.
+
+**Requirements**:
+- `bc` (basic calculator) - usually pre-installed
+- `awk` - usually pre-installed
+- `yq` (optional) - for faster parsing
+
+---
+
 ### sync-config.sh
 
 **Purpose**: Validate configuration synchronization between Docker Compose and Kubernetes

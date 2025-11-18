@@ -4,6 +4,8 @@ This directory contains **plain Kubernetes manifests** for deploying the LightRA
 
 > **Note**: This is one of two deployment options. For production with customization, see the [Helm Chart](../helm/lightrag/). For a complete comparison, see [DEPLOYMENT_STRATEGY.md](../DEPLOYMENT_STRATEGY.md).
 
+> **Development Workflow**: Develop locally with `docker-compose`, then deploy to K8s for production. See [Development Workflow Guide](../docs/DEVELOPMENT_WORKFLOW.md) for keeping configurations in sync.
+
 ## Why Use Plain Manifests?
 
 ✅ **Simplicity**: No additional tools required (just kubectl)

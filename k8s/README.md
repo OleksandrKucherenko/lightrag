@@ -576,6 +576,31 @@ kubectl describe pod <pod-name> -n lightrag
 kubectl get events -n lightrag --sort-by='.lastTimestamp'
 ```
 
+### Cost Monitoring with Kubecost (Recommended)
+
+Track and optimize your Kubernetes costs:
+
+```bash
+# Install Kubecost
+helm repo add kubecost https://kubecost.github.io/cost-analyzer/
+helm install kubecost kubecost/cost-analyzer \
+  --namespace kubecost \
+  --create-namespace \
+  --values kubecost-values.yaml
+
+# Access Kubecost UI
+kubectl port-forward -n kubecost svc/kubecost-cost-analyzer 9090:9090
+# Open: http://localhost:9090
+```
+
+**Kubecost Features**:
+- Real-time cost monitoring by namespace/pod
+- Resource efficiency recommendations
+- Cloud provider billing integration
+- Budget alerts and reports
+
+**See**: [COST_MONITORING.md](COST_MONITORING.md) for complete guide
+
 ### Prometheus & Grafana (Optional)
 
 Install Prometheus stack for comprehensive monitoring:
@@ -594,6 +619,8 @@ helm install prometheus prometheus-community/kube-prometheus-stack \
 kubectl port-forward -n monitoring svc/prometheus-grafana 3000:80
 # Default credentials: admin / prom-operator
 ```
+
+**Note**: Kubecost includes its own Prometheus instance, so you may not need a separate one.
 
 ## Troubleshooting
 

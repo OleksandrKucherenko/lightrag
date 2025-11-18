@@ -229,6 +229,55 @@ EOF
 - Load Balancer: ~$20/month
 - **Total**: ~$385/month
 
+### Cost Monitoring with Kubecost
+
+Track and optimize your Azure costs in real-time:
+
+```bash
+# Install Kubecost with Azure integration
+helm repo add kubecost https://kubecost.github.io/cost-analyzer/
+helm install kubecost kubecost/cost-analyzer \
+  --namespace kubecost \
+  --create-namespace \
+  --values ../kubecost-values.yaml \
+  --set kubecostProductConfigs.clusterName="$CLUSTER_NAME" \
+  --set prometheus.server.global.external_labels.cluster_id="$CLUSTER_NAME"
+
+# Access Kubecost UI
+kubectl port-forward -n kubecost svc/kubecost-cost-analyzer 9090:9090
+# Open: http://localhost:9090
+```
+
+**Azure Billing Integration** (for accurate cloud costs):
+
+1. Create Service Principal for billing access:
+```bash
+# Create service principal
+az ad sp create-for-rbac --name kubecost-azure-sp \
+  --role "Cost Management Reader" \
+  --scopes "/subscriptions/$(az account show --query id -o tsv)"
+# Note the appId, password, and tenant values
+```
+
+2. Configure Kubecost with Azure credentials:
+```bash
+# Create secret with Azure credentials
+kubectl create secret generic azure-service-key \
+  --namespace kubecost \
+  --from-literal=azure-client-id="<appId>" \
+  --from-literal=azure-client-secret="<password>" \
+  --from-literal=azure-tenant-id="<tenant>" \
+  --from-literal=azure-subscription-id="$(az account show --query id -o tsv)"
+
+# Update Kubecost to use Azure billing
+kubectl set env deployment/kubecost-cost-analyzer -n kubecost \
+  CLOUD_PROVIDER_API_KEY="azure-service-key"
+```
+
+3. Verify integration in Kubecost UI under **Settings** → **Cloud Integration**
+
+See [COST_MONITORING.md](COST_MONITORING.md) for complete guide.
+
 ---
 
 ## AWS (EKS)
@@ -408,6 +457,101 @@ echo "Load Balancer: $LB_HOSTNAME"
 - Data transfer: ~$20-50/month
 - **Total**: ~$437-467/month
 
+### Cost Monitoring with Kubecost
+
+Track and optimize your AWS costs in real-time:
+
+```bash
+# Install Kubecost with AWS integration
+helm repo add kubecost https://kubecost.github.io/cost-analyzer/
+helm install kubecost kubecost/cost-analyzer \
+  --namespace kubecost \
+  --create-namespace \
+  --values ../kubecost-values.yaml \
+  --set kubecostProductConfigs.clusterName="$CLUSTER_NAME" \
+  --set prometheus.server.global.external_labels.cluster_id="$CLUSTER_NAME"
+
+# Access Kubecost UI
+kubectl port-forward -n kubecost svc/kubecost-cost-analyzer 9090:9090
+# Open: http://localhost:9090
+```
+
+**AWS Cost and Usage Report (CUR) Integration** (for accurate cloud costs):
+
+1. Enable Cost and Usage Reports in AWS Console:
+```bash
+# Create S3 bucket for CUR data
+aws s3 mb s3://my-kubecost-cur-bucket --region us-east-1
+
+# Enable CUR in AWS Console:
+# - Go to AWS Billing Console → Cost & Usage Reports
+# - Create report named "kubecost-cur"
+# - S3 bucket: my-kubecost-cur-bucket
+# - Time granularity: Hourly
+# - Enable: Resource IDs, Athena integration
+# - Compression: GZIP
+```
+
+2. Create IAM policy for Kubecost:
+```bash
+# Create IAM policy (save as kubecost-policy.json)
+cat > kubecost-policy.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::my-kubecost-cur-bucket",
+        "arn:aws:s3:::my-kubecost-cur-bucket/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "athena:*"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+EOF
+
+# Create policy
+aws iam create-policy \
+  --policy-name KubecostCURAccess \
+  --policy-document file://kubecost-policy.json
+
+# Attach to EKS node instance role
+NODE_INSTANCE_ROLE=$(aws eks describe-nodegroup \
+  --cluster-name $CLUSTER_NAME \
+  --nodegroup-name $(aws eks list-nodegroups --cluster-name $CLUSTER_NAME --query 'nodegroups[0]' --output text) \
+  --query 'nodegroup.nodeRole' --output text | sed 's/.*\///')
+
+aws iam attach-role-policy \
+  --role-name $NODE_INSTANCE_ROLE \
+  --policy-arn arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):policy/KubecostCURAccess
+```
+
+3. Configure Kubecost with CUR details:
+```bash
+# Update Kubecost configuration
+kubectl edit configmap kubecost-cost-analyzer -n kubecost
+# Add under data:
+#   athena-bucket: my-kubecost-cur-bucket
+#   athena-database: athenacurcfn_kubecost_cur
+#   athena-region: us-east-1
+#   athena-table: kubecost_cur
+```
+
+4. Wait 24-48 hours for CUR data to populate, then verify in Kubecost UI
+
+See [COST_MONITORING.md](COST_MONITORING.md) for complete guide.
+
 ---
 
 ## Google Cloud (GKE)
@@ -556,6 +700,91 @@ gcloud dns record-sets create "*.lightrag.yourdomain.com." \
 - Network egress: ~$20-50/month
 - **Total**: ~$523-603/month (Standard), ~$450-530/month (Autopilot)
 
+### Cost Monitoring with Kubecost
+
+Track and optimize your GCP costs in real-time:
+
+```bash
+# Install Kubecost with GCP integration
+helm repo add kubecost https://kubecost.github.io/cost-analyzer/
+helm install kubecost kubecost/cost-analyzer \
+  --namespace kubecost \
+  --create-namespace \
+  --values ../kubecost-values.yaml \
+  --set kubecostProductConfigs.clusterName="$CLUSTER_NAME" \
+  --set prometheus.server.global.external_labels.cluster_id="$CLUSTER_NAME"
+
+# Access Kubecost UI
+kubectl port-forward -n kubecost svc/kubecost-cost-analyzer 9090:9090
+# Open: http://localhost:9090
+```
+
+**GCP BigQuery Billing Integration** (for accurate cloud costs):
+
+1. Enable BigQuery export for billing:
+```bash
+# Set project variables
+export GCP_PROJECT=$(gcloud config get-value project)
+export BILLING_ACCOUNT=$(gcloud billing accounts list --format="value(name)" --limit=1)
+
+# Create BigQuery dataset for billing export
+bq mk --dataset \
+  --location=US \
+  --description "Billing export for Kubecost" \
+  ${GCP_PROJECT}:billing_export
+
+# Enable billing export (do this in GCP Console)
+# Go to: Billing → Billing Export → BigQuery Export
+# - Dataset: billing_export
+# - Enable: Detailed usage cost
+# - Enable: Pricing
+```
+
+2. Create service account for Kubecost:
+```bash
+# Create service account
+gcloud iam service-accounts create kubecost-bigquery \
+  --display-name="Kubecost BigQuery Access"
+
+# Grant BigQuery permissions
+gcloud projects add-iam-policy-binding $GCP_PROJECT \
+  --member="serviceAccount:kubecost-bigquery@${GCP_PROJECT}.iam.gserviceaccount.com" \
+  --role="roles/bigquery.user"
+
+gcloud projects add-iam-policy-binding $GCP_PROJECT \
+  --member="serviceAccount:kubecost-bigquery@${GCP_PROJECT}.iam.gserviceaccount.com" \
+  --role="roles/bigquery.dataViewer"
+
+gcloud projects add-iam-policy-binding $GCP_PROJECT \
+  --member="serviceAccount:kubecost-bigquery@${GCP_PROJECT}.iam.gserviceaccount.com" \
+  --role="roles/bigquery.jobUser"
+
+# Create and download key
+gcloud iam service-accounts keys create kubecost-key.json \
+  --iam-account=kubecost-bigquery@${GCP_PROJECT}.iam.gserviceaccount.com
+```
+
+3. Configure Kubecost with GCP credentials:
+```bash
+# Create secret with service account key
+kubectl create secret generic gcp-service-key \
+  --namespace kubecost \
+  --from-file=key.json=kubecost-key.json
+
+# Update Kubecost configuration
+kubectl edit configmap kubecost-cost-analyzer -n kubecost
+# Add under data:
+#   gcp-billing-export-table: billing_export.gcp_billing_export_v1_<BILLING_ACCOUNT_ID>
+#   gcp-project-id: <YOUR_PROJECT_ID>
+
+# Restart Kubecost
+kubectl rollout restart deployment/kubecost-cost-analyzer -n kubecost
+```
+
+4. Verify integration in Kubecost UI under **Settings** → **Cloud Integration**
+
+See [COST_MONITORING.md](COST_MONITORING.md) for complete guide.
+
 ---
 
 ## DigitalOcean (DOKS)
@@ -696,6 +925,59 @@ doctl compute domain records create lightrag.yourdomain.com \
 
 **Best value for small to medium deployments!**
 
+### Cost Monitoring with Kubecost
+
+Track and optimize your DigitalOcean costs in real-time:
+
+```bash
+# Install Kubecost
+helm repo add kubecost https://kubecost.github.io/cost-analyzer/
+helm install kubecost kubecost/cost-analyzer \
+  --namespace kubecost \
+  --create-namespace \
+  --values ../kubecost-values.yaml \
+  --set kubecostProductConfigs.clusterName="$CLUSTER_NAME" \
+  --set prometheus.server.global.external_labels.cluster_id="$CLUSTER_NAME"
+
+# Access Kubecost UI
+kubectl port-forward -n kubecost svc/kubecost-cost-analyzer 9090:9090
+# Open: http://localhost:9090
+```
+
+**DigitalOcean Cost Integration**:
+
+Kubecost provides accurate cost allocation for DigitalOcean using:
+- **Public pricing data** for Droplets, Volumes, and Load Balancers
+- **Resource-level cost tracking** by namespace, pod, and deployment
+- **Real-time cost monitoring** without API integration required
+
+**Features available without billing integration:**
+- Droplet costs based on public pricing
+- Storage costs (Block Storage volumes)
+- Load Balancer costs
+- Cost allocation by namespace/pod
+- Resource efficiency recommendations
+- Idle resource detection
+
+**Note**: DigitalOcean doesn't currently offer a billing API like AWS/Azure/GCP, but Kubecost's public pricing integration provides accurate cost tracking for DOKS clusters.
+
+**Cost Optimization Tips for DigitalOcean:**
+```bash
+# View namespace costs in Kubecost UI
+# Identify overprovisioned resources
+# Right-size Droplets based on actual usage
+
+# Example: Check if you can downgrade to smaller Droplets
+kubectl top nodes  # Check actual resource usage
+
+# Consider autoscaling for variable workloads
+kubectl autoscale deployment lightrag \
+  --namespace=lightrag \
+  --min=1 --max=3 --cpu-percent=70
+```
+
+See [COST_MONITORING.md](COST_MONITORING.md) for complete guide.
+
 ---
 
 ## Civo
@@ -828,6 +1110,70 @@ civo dns domain-record-create lightrag.yourdomain.com \
 - **Total**: ~$75/month
 
 **Most cost-effective option!**
+
+### Cost Monitoring with Kubecost
+
+Track and optimize your Civo costs in real-time:
+
+```bash
+# Install Kubecost
+helm repo add kubecost https://kubecost.github.io/cost-analyzer/
+helm install kubecost kubecost/cost-analyzer \
+  --namespace kubecost \
+  --create-namespace \
+  --values ../kubecost-values.yaml \
+  --set kubecostProductConfigs.clusterName="$CLUSTER_NAME" \
+  --set prometheus.server.global.external_labels.cluster_id="$CLUSTER_NAME"
+
+# Access Kubecost UI
+kubectl port-forward -n kubecost svc/kubecost-cost-analyzer 9090:9090
+# Open: http://localhost:9090
+```
+
+**Civo Cost Integration**:
+
+Kubecost provides accurate cost allocation for Civo using:
+- **Public pricing data** for Civo Kubernetes nodes and volumes
+- **Resource-level cost tracking** by namespace, pod, and deployment
+- **Real-time cost monitoring** without API integration required
+
+**Features available without billing integration:**
+- Node costs based on public pricing (very predictable with Civo!)
+- Volume costs (Block Storage)
+- Cost allocation by namespace/pod
+- Resource efficiency recommendations
+- Idle resource detection
+
+**Why Kubecost is especially valuable on Civo:**
+- **Lowest infrastructure costs** mean optimization has high ROI
+- **Predictable pricing** makes cost allocation very accurate
+- **Fast provisioning** allows quick testing of optimizations
+- **Free bandwidth** eliminates one cost variable
+
+**Cost Optimization Tips for Civo:**
+```bash
+# Civo already has the lowest costs, but you can optimize further:
+
+# 1. Right-size your workloads
+kubectl top nodes
+kubectl top pods -n lightrag
+
+# 2. Use smaller node sizes if possible
+# g4s.kube.small: $10/month (2 vCPU, 4GB RAM)
+# g4s.kube.medium: $20/month (2 vCPU, 8GB RAM) ← current
+# g4s.kube.large: $40/month (4 vCPU, 16GB RAM)
+
+# 3. Implement autoscaling to scale down during low usage
+kubectl autoscale deployment lightrag \
+  --namespace=lightrag \
+  --min=1 --max=2 --cpu-percent=70
+
+# 4. Monitor in Kubecost to identify idle resources
+```
+
+**Civo + Kubecost = Best Cost-to-Value Ratio** for LightRAG deployments!
+
+See [COST_MONITORING.md](COST_MONITORING.md) for complete guide.
 
 ---
 

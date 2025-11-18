@@ -21,216 +21,24 @@ jobs:
       - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Need full history to compare with base
+          fetch-depth: 0
 
       - name: Fetch base branch
-        run: |
-          git fetch origin ${{ github.base_ref }}
+        run: git fetch origin ${{ github.base_ref }}
 
-      - name: Install yq
+      - name: Install dependencies
         run: |
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
-          yq --version
+          sudo apt-get update && sudo apt-get install -y bc
 
-      - name: Install bc (calculator)
-        run: sudo apt-get update && sudo apt-get install -y bc
-
-      - name: Extract current resources
-        id: current
+      - name: Generate cost estimate
+        id: cost_estimate
+        env:
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO_URL: ${{ github.event.pull_request.head.repo.html_url }}
         run: |
-          source ./scripts/estimate-costs.sh
-          VALUES_FILE="helm/lightrag/values.yaml"
-
-          read -r CPU RAM STORAGE <<< "$(extract_helm_resources "$VALUES_FILE")"
-
-          echo "cpu=$CPU" >> $GITHUB_OUTPUT
-          echo "ram=$RAM" >> $GITHUB_OUTPUT
-          echo "storage=$STORAGE" >> $GITHUB_OUTPUT
-
-          echo "Current resources: CPU=$CPU RAM=$RAM Storage=$STORAGE"
-
-      - name: Extract base resources
-        id: base
-        run: |
-          source ./scripts/estimate-costs.sh
-
-          git show origin/${{ github.base_ref }}:helm/lightrag/values.yaml > /tmp/base-values.yaml || {
-            echo "Warning: Could not fetch base values"
-            cp helm/lightrag/values.yaml /tmp/base-values.yaml
-          }
-
-          read -r CPU RAM STORAGE <<< "$(extract_helm_resources "/tmp/base-values.yaml")"
-
-          echo "cpu=$CPU" >> $GITHUB_OUTPUT
-          echo "ram=$RAM" >> $GITHUB_OUTPUT
-          echo "storage=$STORAGE" >> $GITHUB_OUTPUT
-
-          echo "Base resources: CPU=$CPU RAM=$RAM Storage=$STORAGE"
-
-      - name: Calculate cost estimates
-        id: costs
-        run: |
-          # Source the functions from the script
-          source ./scripts/estimate-costs.sh
-
-          CURRENT_CPU=${{ steps.current.outputs.cpu }}
-          CURRENT_RAM=${{ steps.current.outputs.ram }}
-          CURRENT_STORAGE=${{ steps.current.outputs.storage }}
-
-          BASE_CPU=${{ steps.base.outputs.cpu }}
-          BASE_RAM=${{ steps.base.outputs.ram }}
-          BASE_STORAGE=${{ steps.base.outputs.storage }}
-
-          # Calculate changes
-          CPU_CHANGE=$(echo "scale=2; $CURRENT_CPU - $BASE_CPU" | bc)
-          RAM_CHANGE=$(echo "scale=2; $CURRENT_RAM - $BASE_RAM" | bc)
-          STORAGE_CHANGE=$(echo "scale=2; $CURRENT_STORAGE - $BASE_STORAGE" | bc)
-
-          # Calculate costs for each provider (current)
-          IFS='|' read -r aws_cpu aws_ram aws_storage aws_cp aws_compute aws_total <<< \
-            "$(calculate_provider_cost $CURRENT_CPU $CURRENT_RAM $CURRENT_STORAGE \
-               $AWS_CPU_PRICE $AWS_RAM_PRICE $AWS_STORAGE_PRICE $AWS_CONTROL_PLANE)"
-
-          IFS='|' read -r azure_cpu azure_ram azure_storage azure_cp azure_compute azure_total <<< \
-            "$(calculate_provider_cost $CURRENT_CPU $CURRENT_RAM $CURRENT_STORAGE \
-               $AZURE_CPU_PRICE $AZURE_RAM_PRICE $AZURE_STORAGE_PRICE $AZURE_CONTROL_PLANE)"
-
-          IFS='|' read -r gcp_cpu gcp_ram gcp_storage gcp_cp gcp_compute gcp_total <<< \
-            "$(calculate_provider_cost $CURRENT_CPU $CURRENT_RAM $CURRENT_STORAGE \
-               $GCP_CPU_PRICE $GCP_RAM_PRICE $GCP_STORAGE_PRICE $GCP_CONTROL_PLANE)"
-
-          IFS='|' read -r do_cpu do_ram do_storage do_cp do_compute do_total <<< \
-            "$(calculate_provider_cost $CURRENT_CPU $CURRENT_RAM $CURRENT_STORAGE \
-               $DO_CPU_PRICE $DO_RAM_PRICE $DO_STORAGE_PRICE $DO_CONTROL_PLANE)"
-
-          IFS='|' read -r civo_cpu civo_ram civo_storage civo_cp civo_compute civo_total <<< \
-            "$(calculate_provider_cost $CURRENT_CPU $CURRENT_RAM $CURRENT_STORAGE \
-               $CIVO_CPU_PRICE $CIVO_RAM_PRICE $CIVO_STORAGE_PRICE $CIVO_CONTROL_PLANE)"
-
-          # Calculate costs for base
-          IFS='|' read -r aws_cpu_base aws_ram_base aws_storage_base aws_cp_base aws_compute_base aws_total_base <<< \
-            "$(calculate_provider_cost $BASE_CPU $BASE_RAM $BASE_STORAGE \
-               $AWS_CPU_PRICE $AWS_RAM_PRICE $AWS_STORAGE_PRICE $AWS_CONTROL_PLANE)"
-
-          IFS='|' read -r azure_cpu_base azure_ram_base azure_storage_base azure_cp_base azure_compute_base azure_total_base <<< \
-            "$(calculate_provider_cost $BASE_CPU $BASE_RAM $BASE_STORAGE \
-               $AZURE_CPU_PRICE $AZURE_RAM_PRICE $AZURE_STORAGE_PRICE $AZURE_CONTROL_PLANE)"
-
-          IFS='|' read -r gcp_cpu_base gcp_ram_base gcp_storage_base gcp_cp_base gcp_compute_base gcp_total_base <<< \
-            "$(calculate_provider_cost $BASE_CPU $BASE_RAM $BASE_STORAGE \
-               $GCP_CPU_PRICE $GCP_RAM_PRICE $GCP_STORAGE_PRICE $GCP_CONTROL_PLANE)"
-
-          IFS='|' read -r do_cpu_base do_ram_base do_storage_base do_cp_base do_compute_base do_total_base <<< \
-            "$(calculate_provider_cost $BASE_CPU $BASE_RAM $BASE_STORAGE \
-               $DO_CPU_PRICE $DO_RAM_PRICE $DO_STORAGE_PRICE $DO_CONTROL_PLANE)"
-
-          IFS='|' read -r civo_cpu_base civo_ram_base civo_storage_base civo_cp_base civo_compute_base civo_total_base <<< \
-            "$(calculate_provider_cost $BASE_CPU $BASE_RAM $BASE_STORAGE \
-               $CIVO_CPU_PRICE $CIVO_RAM_PRICE $CIVO_STORAGE_PRICE $CIVO_CONTROL_PLANE)"
-
-          # Save all outputs
-          echo "cpu_change=$CPU_CHANGE" >> $GITHUB_OUTPUT
-          echo "ram_change=$RAM_CHANGE" >> $GITHUB_OUTPUT
-          echo "storage_change=$STORAGE_CHANGE" >> $GITHUB_OUTPUT
-
-          echo "aws_current=$aws_total" >> $GITHUB_OUTPUT
-          echo "aws_base=$aws_total_base" >> $GITHUB_OUTPUT
-          echo "aws_diff=$(echo "scale=2; $aws_total - $aws_total_base" | bc)" >> $GITHUB_OUTPUT
-
-          echo "azure_current=$azure_total" >> $GITHUB_OUTPUT
-          echo "azure_base=$azure_total_base" >> $GITHUB_OUTPUT
-          echo "azure_diff=$(echo "scale=2; $azure_total - $azure_total_base" | bc)" >> $GITHUB_OUTPUT
-
-          echo "gcp_current=$gcp_total" >> $GITHUB_OUTPUT
-          echo "gcp_base=$gcp_total_base" >> $GITHUB_OUTPUT
-          echo "gcp_diff=$(echo "scale=2; $gcp_total - $gcp_total_base" | bc)" >> $GITHUB_OUTPUT
-
-          echo "do_current=$do_total" >> $GITHUB_OUTPUT
-          echo "do_base=$do_total_base" >> $GITHUB_OUTPUT
-          echo "do_diff=$(echo "scale=2; $do_total - $do_total_base" | bc)" >> $GITHUB_OUTPUT
-
-          echo "civo_current=$civo_total" >> $GITHUB_OUTPUT
-          echo "civo_base=$civo_total_base" >> $GITHUB_OUTPUT
-          echo "civo_diff=$(echo "scale=2; $civo_total - $civo_total_base" | bc)" >> $GITHUB_OUTPUT
-
-      - name: Generate cost report
-        id: report
-        run: |
-          # Pre-calculate daily and yearly values
-          AWS_DAILY=$(echo "scale=2; ${{ steps.costs.outputs.aws_diff }} / 30" | bc)
-          AWS_YEARLY=$(echo "scale=2; ${{ steps.costs.outputs.aws_diff }} * 12" | bc)
-          AZURE_DAILY=$(echo "scale=2; ${{ steps.costs.outputs.azure_diff }} / 30" | bc)
-          AZURE_YEARLY=$(echo "scale=2; ${{ steps.costs.outputs.azure_diff }} * 12" | bc)
-          GCP_DAILY=$(echo "scale=2; ${{ steps.costs.outputs.gcp_diff }} / 30" | bc)
-          GCP_YEARLY=$(echo "scale=2; ${{ steps.costs.outputs.gcp_diff }} * 12" | bc)
-          DO_DAILY=$(echo "scale=2; ${{ steps.costs.outputs.do_diff }} / 30" | bc)
-          DO_YEARLY=$(echo "scale=2; ${{ steps.costs.outputs.do_diff }} * 12" | bc)
-          CIVO_DAILY=$(echo "scale=2; ${{ steps.costs.outputs.civo_diff }} / 30" | bc)
-          CIVO_YEARLY=$(echo "scale=2; ${{ steps.costs.outputs.civo_diff }} * 12" | bc)
-
-          # Get commit hash and timestamp
-          COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
-          COMMIT_SHORT="${COMMIT_SHA:0:7}"
-          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-
-          # Determine change status
-          CPU_CHANGE=${{ steps.costs.outputs.cpu_change }}
-          RAM_CHANGE=${{ steps.costs.outputs.ram_change }}
-          STORAGE_CHANGE=${{ steps.costs.outputs.storage_change }}
-
-          if (( $(echo "$CPU_CHANGE > 0 || $RAM_CHANGE > 0 || $STORAGE_CHANGE > 0" | bc -l) )); then
-            SUMMARY="⚠️ **This PR increases resource usage and will increase costs.**"
-          elif (( $(echo "$CPU_CHANGE < 0 || $RAM_CHANGE < 0 || $STORAGE_CHANGE < 0" | bc -l) )); then
-            SUMMARY="✅ **This PR reduces resource usage and will reduce costs.**"
-          else
-            SUMMARY="ℹ️ **This PR has no resource changes.**"
-          fi
-
-          # Create markdown report using cat with variable expansion
-          cat > /tmp/cost-report.md << EOFMARKER
-          ## 💰 Cost Impact Analysis
-
-          > **Analysis based on commit:** [\`${COMMIT_SHORT}\`](${{ github.event.pull_request.head.repo.html_url }}/commit/${COMMIT_SHA})
-          > **Generated at:** ${TIMESTAMP}
-
-          ### Resource Changes
-
-          | Resource | Current | Base | Change |
-          |----------|---------|------|--------|
-          | **CPU** (cores) | ${{ steps.current.outputs.cpu }} | ${{ steps.base.outputs.cpu }} | ${{ steps.costs.outputs.cpu_change }} |
-          | **RAM** (GB) | ${{ steps.current.outputs.ram }} | ${{ steps.base.outputs.ram }} | ${{ steps.costs.outputs.ram_change }} |
-          | **Storage** (GB) | ${{ steps.current.outputs.storage }} | ${{ steps.base.outputs.storage }} | ${{ steps.costs.outputs.storage_change }} |
-
-          ### Monthly Cost Estimates (USD)
-
-          | Provider | Current | Base | Monthly Δ | Daily Δ | Yearly Δ |
-          |----------|---------|------|-----------|---------|----------|
-          | **AWS EKS** | \$${{ steps.costs.outputs.aws_current }} | \$${{ steps.costs.outputs.aws_base }} | \$${{ steps.costs.outputs.aws_diff }} | \$${AWS_DAILY} | \$${AWS_YEARLY} |
-          | **Azure AKS** | \$${{ steps.costs.outputs.azure_current }} | \$${{ steps.costs.outputs.azure_base }} | \$${{ steps.costs.outputs.azure_diff }} | \$${AZURE_DAILY} | \$${AZURE_YEARLY} |
-          | **GCP GKE** | \$${{ steps.costs.outputs.gcp_current }} | \$${{ steps.costs.outputs.gcp_base }} | \$${{ steps.costs.outputs.gcp_diff }} | \$${GCP_DAILY} | \$${GCP_YEARLY} |
-          | **DigitalOcean** | \$${{ steps.costs.outputs.do_current }} | \$${{ steps.costs.outputs.do_base }} | \$${{ steps.costs.outputs.do_diff }} | \$${DO_DAILY} | \$${DO_YEARLY} |
-          | **Civo** | \$${{ steps.costs.outputs.civo_current }} | \$${{ steps.costs.outputs.civo_base }} | \$${{ steps.costs.outputs.civo_diff }} | \$${CIVO_DAILY} | \$${CIVO_YEARLY} |
-
-          ### Summary
-
-          ${SUMMARY}
-
-          ---
-
-          **Cost Savings Tips:**
-          - Use reserved instances for 40-60% savings on predictable workloads
-          - Enable autoscaling to optimize costs during low usage periods
-          - Review resource requests vs limits - use requests for cost planning
-          - Consider spot/preemptible instances for non-critical workloads
-
-          _Estimates based on standard instance pricing as of 2024. Actual costs may vary based on region, discounts, and usage patterns._
-
-          📊 For real-time cost monitoring after deployment, see [Cost Monitoring Guide](../blob/main/k8s/COST_MONITORING.md)
-
-          ---
-          <sub>🤖 This comment will be automatically updated when new commits are pushed.</sub>
-          EOFMARKER
+          ./scripts/ci-cost-estimate.sh "${{ github.base_ref }}" /tmp/cost-report.md
 
       - name: Post cost estimate as PR comment
         uses: actions/github-script@v7
@@ -239,15 +47,12 @@ jobs:
             const fs = require('fs');
             const costReport = fs.readFileSync('/tmp/cost-report.md', 'utf8');
 
-            // Find existing cost analysis comment from this bot
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
 
-            // Look for existing cost analysis comment
-            // Check both user.type === 'Bot' and user.login === 'github-actions[bot]'
             const botComment = comments.find(comment => {
               const isBot = comment.user.type === 'Bot' || comment.user.login === 'github-actions[bot]';
               const hasCostAnalysis = comment.body.includes('💰 Cost Impact Analysis');
@@ -255,7 +60,6 @@ jobs:
             });
 
             if (botComment) {
-              // Update existing comment
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -263,9 +67,7 @@ jobs:
                 body: costReport
               });
               console.log(`✅ Updated existing cost estimate comment (ID: ${botComment.id})`);
-              console.log(`   Previous commit was tracked in comment ${botComment.id}`);
             } else {
-              // Create new comment
               const { data: newComment } = await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -275,21 +77,6 @@ jobs:
               console.log(`✅ Created new cost estimate comment (ID: ${newComment.id})`);
             }
 
-            console.log(`📊 Cost analysis for commit: ${{ github.event.pull_request.head.sha }}`)
-
       - name: Generate cost summary for job summary
         run: |
           cat /tmp/cost-report.md >> $GITHUB_STEP_SUMMARY
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Detailed Breakdown" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Current Configuration:**" >> $GITHUB_STEP_SUMMARY
-          echo "- CPU: ${{ steps.current.outputs.cpu }} cores" >> $GITHUB_STEP_SUMMARY
-          echo "- RAM: ${{ steps.current.outputs.ram }} GB" >> $GITHUB_STEP_SUMMARY
-          echo "- Storage: ${{ steps.current.outputs.storage }} GB" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Base Configuration:**" >> $GITHUB_STEP_SUMMARY
-          echo "- CPU: ${{ steps.base.outputs.cpu }} cores" >> $GITHUB_STEP_SUMMARY
-          echo "- RAM: ${{ steps.base.outputs.ram }} GB" >> $GITHUB_STEP_SUMMARY
-          echo "- Storage: ${{ steps.base.outputs.storage }} GB" >> $GITHUB_STEP_SUMMARY

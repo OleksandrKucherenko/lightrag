@@ -4,7 +4,56 @@ This directory contains utility scripts for managing the LightRAG deployment.
 
 ## Available Scripts
 
-### estimate-costs.sh
+### CI Scripts
+
+These scripts are designed for GitHub Actions workflows but can also be run locally for testing.
+
+#### ci-cost-estimate.sh
+
+**Purpose**: Generate PR cost estimation report for GitHub Actions
+
+**Usage**:
+```bash
+COMMIT_SHA=abc1234 REPO_URL=https://github.com/user/repo \
+  ./scripts/ci-cost-estimate.sh main /tmp/cost-report.md
+```
+
+**What it does**:
+- Extracts resources from current and base branch
+- Calculates costs for all 5 cloud providers
+- Generates markdown report with commit hash and timestamp
+- Exports data to `$GITHUB_OUTPUT` if running in GitHub Actions
+
+**Output**: Markdown file suitable for PR comments
+
+---
+
+#### ci-config-sync.sh
+
+**Purpose**: Generate configuration sync validation report for GitHub Actions
+
+**Usage**:
+```bash
+COMMIT_SHA=abc1234 REPO_URL=https://github.com/user/repo \
+  ./scripts/ci-config-sync.sh /tmp/sync-report.md
+```
+
+**What it does**:
+- Runs `sync-config.sh --ci` and captures output
+- Parses warnings and errors
+- Generates markdown report with detailed findings
+- Exports data to `$GITHUB_OUTPUT` if running in GitHub Actions
+- Exits with the same code as the sync check (fails CI on errors)
+
+**Output**: Markdown file suitable for PR comments
+
+---
+
+### User Scripts
+
+These scripts are meant to be run directly by developers.
+
+#### estimate-costs.sh
 
 **Purpose**: Estimate monthly/yearly Kubernetes costs across multiple cloud providers
 

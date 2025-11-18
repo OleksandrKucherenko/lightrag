@@ -1,0 +1,388 @@
+# Default values for LightRAG Helm chart
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global configuration
+global:
+  publishDomain: dev.localhost
+  storageClass: ""  # Use default storage class if empty
+
+# Namespace
+namespace:
+  create: true
+  name: lightrag
+
+# Common labels
+commonLabels:
+  app.kubernetes.io/part-of: lightrag-stack
+
+# Image pull secrets (if using private registry)
+imagePullSecrets: []
+
+# Redis configuration
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "8-alpine"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  service:
+    type: ClusterIP
+    port: 6379
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+  persistence:
+    enabled: true
+    size: 5Gi
+    # storageClass: ""
+
+  auth:
+    # Password should be set via secrets
+    existingSecret: "lightrag-secrets"
+    existingSecretKey: "REDIS_PASSWORD"
+
+# Memgraph configuration
+memgraph:
+  enabled: true
+  image:
+    repository: memgraph/memgraph
+    tag: "2.18.1"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  service:
+    type: ClusterIP
+    port: 7687
+
+  resources:
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+    requests:
+      cpu: 2000m
+      memory: 4Gi
+
+  persistence:
+    data:
+      enabled: true
+      size: 10Gi
+    logs:
+      enabled: true
+      size: 2Gi
+
+  args:
+    - --log-level=WARNING
+    - --memory-limit=4096
+    - --data-recovery-on-startup=true
+    - --telemetry-enabled=false
+
+  # Memgraph Lab UI
+  lab:
+    enabled: true
+    image:
+      repository: memgraph/lab
+      tag: "2.14.1"
+      pullPolicy: IfNotPresent
+
+    service:
+      type: ClusterIP
+      port: 3000
+
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
+
+# Qdrant configuration
+qdrant:
+  enabled: true
+  image:
+    repository: qdrant/qdrant
+    tag: "v1.10.1"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  service:
+    type: ClusterIP
+    httpPort: 6333
+    grpcPort: 6334
+
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+
+  persistence:
+    storage:
+      enabled: true
+      size: 20Gi
+    snapshots:
+      enabled: true
+      size: 10Gi
+
+# LightRAG application configuration
+lightrag:
+  enabled: true
+  image:
+    repository: ghcr.io/hkuds/lightrag
+    tag: "0.0.5"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  service:
+    type: ClusterIP
+    port: 9621
+
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+
+  persistence:
+    storage:
+      enabled: true
+      size: 20Gi
+    inputs:
+      enabled: true
+      size: 10Gi
+    logs:
+      enabled: true
+      size: 5Gi
+
+  config:
+    host: "0.0.0.0"
+    port: "9621"
+    workers: "6"
+
+    # Storage backends
+    kvStorage: "RedisKVStorage"
+    vectorStorage: "QdrantVectorDBStorage"
+    graphStorage: "MemgraphStorage"
+
+    # LLM configuration
+    llmBinding: "openai"
+    llmModel: "gpt-4o-mini"
+    embeddingBinding: "openai"
+    embeddingModel: "text-embedding-3-small"
+
+    # Performance tuning
+    maxParallelInsert: "4"
+    maxAsync: "8"
+    llmApiTimeout: "120"
+    llmApiRetryAttempts: "3"
+    llmConnectionPoolSize: "20"
+    embeddingBatchSize: "100"
+
+# LobeChat configuration
+lobechat:
+  enabled: true
+  image:
+    repository: lobehub/lobe-chat
+    tag: "v1.17.12"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  service:
+    type: ClusterIP
+    port: 3210
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+  persistence:
+    enabled: true
+    size: 5Gi
+
+  config:
+    appName: "LobeChat + LightRAG"
+    defaultAgentConfig: '{"model":"lightrag","systemRole":"AI assistant with graph knowledge"}'
+    nodeOptions: "--max_old_space_size=2048"
+
+# Monitor (Isaiah) configuration
+monitor:
+  enabled: true
+  image:
+    repository: ghcr.io/will-moss/isaiah
+    tag: "1.30.0"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 1
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"  # Uncomment if using cert-manager
+
+  tls:
+    enabled: false
+    # secretName: lightrag-tls
+
+  hosts:
+    main:
+      enabled: true
+      host: ""  # Uses global.publishDomain
+      paths:
+        - path: /
+          service: lobechat
+          port: 3210
+
+    chat:
+      enabled: true
+      subdomain: chat
+      paths:
+        - path: /
+          service: lobechat
+          port: 3210
+
+    lobechat:
+      enabled: true
+      subdomain: lobechat
+      paths:
+        - path: /
+          service: lobechat
+          port: 3210
+
+    rag:
+      enabled: true
+      subdomain: rag
+      paths:
+        - path: /
+          service: lightrag
+          port: 9621
+
+    api:
+      enabled: true
+      subdomain: api
+      paths:
+        - path: /
+          service: lightrag
+          port: 9621
+
+    graph:
+      enabled: true
+      subdomain: graph
+      paths:
+        - path: /
+          service: memgraph-lab
+          port: 3000
+
+    vector:
+      enabled: true
+      subdomain: vector
+      paths:
+        - path: /
+          service: qdrant
+          port: 6333
+
+    monitor:
+      enabled: true
+      subdomain: monitor
+      paths:
+        - path: /
+          service: monitor
+          port: 3000
+
+# Secrets configuration
+# IMPORTANT: These values should be overridden via helm install --set or values file
+# Never commit actual secrets to git!
+secrets:
+  # Redis password
+  redisPassword: "change-me-please"
+
+  # OpenAI API keys (base64 encoded in secrets, plain here for helm)
+  llmBindingApiKey: "sk-YOUR-LLM-API-KEY"
+  embeddingBindingApiKey: "sk-YOUR-EMBEDDING-API-KEY"
+  openaiApiKey: "sk-YOUR-OPENAI-API-KEY"
+  lightragApiKey: "sk-YOUR-LIGHTRAG-API-KEY"
+
+  # LobeChat access code (optional)
+  lobechatAccessCode: "dev-access-2024"
+
+  # Monitor basic auth hash
+  monitorBasicAuthHash: "YOUR-HASH-HERE"
+
+# Network policies (optional)
+networkPolicies:
+  enabled: false
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+
+# Security context for containers
+securityContext:
+  runAsNonRoot: false
+  runAsUser: 0
+  # capabilities:
+  #   drop:
+  #   - ALL
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}
+
+# Service account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# RBAC
+rbac:
+  create: true

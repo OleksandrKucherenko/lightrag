@@ -1,0 +1,192 @@
+# Kubecost Helm Chart Values for LightRAG
+# This values file is optimized for the LightRAG deployment
+#
+# Usage:
+#   helm repo add kubecost https://kubecost.github.io/cost-analyzer/
+#   helm repo update
+#   helm install kubecost kubecost/cost-analyzer \
+#     --namespace kubecost \
+#     --create-namespace \
+#     --values kubecost-values.yaml
+
+# Global settings
+global:
+  # Cluster name for multi-cluster environments
+  prometheus:
+    external_labels:
+      cluster_id: lightrag-cluster
+
+# Kubecost specific settings
+kubecostProductConfigs:
+  # Product configuration
+  currencyCode: "USD"
+
+  # Custom pricing (override defaults)
+  # Uncomment and adjust based on your actual costs
+  # defaultModelPricing: |-
+  #   {
+  #     "CPU": "0.031611",
+  #     "RAM": "0.004237",
+  #     "storage": "0.00005",
+  #     "GPU": "0.95"
+  #   }
+
+  # Cloud integration
+  # AWS
+  # athenaBucketName: "s3://my-kubecost-bucket"
+  # athenaRegion: "us-east-1"
+  # athenaDatabase: "athenacurcfn_my_report"
+  # athenaTable: "my_report"
+
+  # Azure
+  # azureSubscriptionID: "your-subscription-id"
+  # azureTenantID: "your-tenant-id"
+  # azureClientID: "your-client-id"
+  # azureClientPassword: "your-client-password"
+
+  # GCP
+  # gcpBillingDataDataset: "billing_dataset"
+  # gcpBillingDataTable: "gcp_billing_export"
+
+# Prometheus configuration
+prometheus:
+  server:
+    global:
+      external_labels:
+        cluster_id: lightrag-cluster
+
+    # Resource limits
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
+
+    # Retention period (how long to keep metrics)
+    retention: "15d"
+
+    # Persistent storage for Prometheus
+    persistentVolume:
+      enabled: true
+      size: 8Gi
+      # storageClass: "standard" # Uncomment and set your storage class
+
+  # Node exporter for node-level metrics
+  nodeExporter:
+    enabled: true
+    resources:
+      limits:
+        cpu: 200m
+        memory: 50Mi
+      requests:
+        cpu: 100m
+        memory: 30Mi
+
+  # Service accounts
+  serviceAccounts:
+    nodeExporter:
+      create: true
+    server:
+      create: true
+
+# Kubecost frontend/backend
+kubecost:
+  # Resource limits for Kubecost
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  hosts:
+    - host: kubecost.dev.localhost
+      paths:
+        - path: /
+          pathType: Prefix
+  # TLS configuration (uncomment for HTTPS)
+  # tls:
+  #   - secretName: kubecost-tls
+  #     hosts:
+  #       - kubecost.yourdomain.com
+
+# Grafana (optional, for advanced dashboards)
+grafana:
+  enabled: false # We use Kubecost UI instead
+
+# Network costs (requires network policy)
+networkCosts:
+  enabled: false # Enable if you want pod-to-pod network cost tracking
+  # Requires network policy support in your cluster
+
+# Reporting and alerts
+reporting:
+  # Weekly reports
+  reports:
+    enabled: false # Enable for email reports (requires email configuration)
+
+# Authentication
+# For production, enable authentication
+# oidcAuth:
+#   enabled: false
+# basicAuth:
+#   enabled: false
+
+# Priority class (optional)
+# priorityClassName: system-cluster-critical
+
+# Node selector (optional)
+# nodeSelector:
+#   monitoring: "true"
+
+# Tolerations (optional)
+# tolerations: []
+
+# Affinity (optional)
+# affinity: {}
+
+# Service monitor for external Prometheus (if using separate Prometheus)
+serviceMonitor:
+  enabled: false
+
+# PodSecurityPolicy (deprecated in K8s 1.25+)
+podSecurityPolicy:
+  enabled: false
+
+# Image pull secrets (if using private registry)
+# imagePullSecrets: []
+
+# Additional environment variables
+# env:
+#   - name: CUSTOM_VAR
+#     value: "custom-value"
+
+# Kubecost model
+kubecostModel:
+  # Resources for cost model
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Cost allocation
+# For accurate allocation across namespaces and labels
+costAllocation:
+  enabled: true
+  # Custom labels for cost allocation
+  # labels:
+  #   - "app"
+  #   - "environment"
+  #   - "team"

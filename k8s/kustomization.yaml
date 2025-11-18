@@ -1,0 +1,58 @@
+# Kustomization file for LightRAG Kubernetes deployment
+# This file helps with deployment ordering and customization
+#
+# Usage:
+#   kubectl apply -k k8s/
+#   kubectl delete -k k8s/
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: lightrag
+
+# Resources in deployment order
+resources:
+  - 00-namespace.yaml
+  - 01-configmaps.yaml
+  - 02-secrets.yaml
+  - 03-storage.yaml
+  - 04-redis.yaml
+  - 05-memgraph.yaml
+  - 06-qdrant.yaml
+  - 07-lightrag.yaml
+  - 08-lobechat.yaml
+  - 09-monitor.yaml
+  - 10-ingress.yaml
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/part-of: lightrag-stack
+  app.kubernetes.io/managed-by: kustomize
+
+# Common annotations
+commonAnnotations:
+  documentation: "https://github.com/HKUDS/LightRAG"
+
+# Configure image tags (override if needed)
+# images:
+#   - name: ghcr.io/hkuds/lightrag
+#     newTag: v1.0.0
+#   - name: lobehub/lobe-chat
+#     newTag: v1.0.0
+
+# Patches for environment-specific customization
+# Example: Different resource limits for production
+# patchesStrategicMerge:
+#   - patches/production-resources.yaml
+
+# ConfigMap generator (alternative to 01-configmaps.yaml)
+# configMapGenerator:
+#   - name: lightrag-config
+#     literals:
+#       - PUBLISH_DOMAIN=dev.localhost
+
+# Secret generator (DO NOT USE for sensitive data in git)
+# secretGenerator:
+#   - name: lightrag-secrets
+#     literals:
+#       - REDIS_PASSWORD=change-me

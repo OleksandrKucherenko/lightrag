@@ -1,0 +1,122 @@
+---
+# Kubecost - Kubernetes Cost Monitoring and Management
+# This is an OPTIONAL component for cost visibility
+#
+# Kubecost provides:
+# - Real-time cost monitoring by namespace, pod, deployment
+# - Cost allocation and chargeback
+# - Resource efficiency recommendations
+# - Cloud provider cost integration
+#
+# To install with Helm (recommended):
+#   helm install kubecost kubecost/cost-analyzer \
+#     --namespace kubecost --create-namespace \
+#     --set kubecostToken="your-token-here"
+#
+# To access UI after deployment:
+#   kubectl port-forward -n kubecost svc/kubecost-cost-analyzer 9090:9090
+#   Open: http://localhost:9090
+#
+# Official docs: https://www.kubecost.com/
+# GitHub: https://github.com/kubecost/cost-analyzer-helm-chart
+#
+# Note: This manifest uses the Helm-based approach for easier installation
+# For production, consider kubecost enterprise features
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubecost
+  labels:
+    app.kubernetes.io/name: kubecost
+    app.kubernetes.io/component: cost-monitoring
+
+---
+# ConfigMap for Kubecost configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kubecost-config
+  namespace: kubecost
+  labels:
+    app.kubernetes.io/name: kubecost
+data:
+  # Kubecost configuration
+  # For more options, see: https://docs.kubecost.com/install-and-configure/install/config
+  config.yaml: |
+    # Cost allocation settings
+    costAllocation:
+      enabled: true
+
+    # Cloud provider integration (optional)
+    # Uncomment and configure for your cloud provider
+    # cloudIntegration:
+    #   aws:
+    #     enabled: false
+    #     # accessKeyID: "YOUR_ACCESS_KEY"
+    #     # secretAccessKey: "YOUR_SECRET_KEY"
+    #   azure:
+    #     enabled: false
+    #   gcp:
+    #     enabled: false
+
+    # Prometheus integration
+    prometheus:
+      enabled: true
+
+    # Currency and pricing
+    currency: "USD"
+
+    # Resource efficiency recommendations
+    recommendations:
+      enabled: true
+
+---
+# Note: For easier deployment, use Helm:
+#
+# 1. Add Kubecost Helm repo:
+#    helm repo add kubecost https://kubecost.github.io/cost-analyzer/
+#    helm repo update
+#
+# 2. Install Kubecost:
+#    helm install kubecost kubecost/cost-analyzer \
+#      --namespace kubecost \
+#      --create-namespace \
+#      --set prometheus.server.global.external_labels.cluster_id=lightrag-cluster \
+#      --set prometheus.nodeExporter.enabled=true \
+#      --set prometheus.serviceAccounts.nodeExporter.create=true \
+#      --set ingress.enabled=true \
+#      --set ingress.className=nginx \
+#      --set ingress.hosts[0].host=kubecost.dev.localhost \
+#      --set ingress.hosts[0].paths[0].path=/ \
+#      --set ingress.hosts[0].paths[0].pathType=Prefix
+#
+# 3. Access Kubecost UI:
+#    kubectl port-forward -n kubecost svc/kubecost-cost-analyzer 9090:9090
+#    Open: http://localhost:9090
+#
+# 4. For cloud integration, see:
+#    https://docs.kubecost.com/install-and-configure/install/cloud-integration
+#
+# 5. For custom domain with ingress:
+#    Add to /etc/hosts: <ingress-ip> kubecost.dev.localhost
+#    Access: http://kubecost.dev.localhost
+#
+# Key Features:
+# - Cost monitoring by namespace (see lightrag namespace costs)
+# - Pod-level cost breakdown
+# - Resource efficiency recommendations
+# - Idle resource detection
+# - Cloud provider cost integration (AWS, Azure, GCP, DigitalOcean)
+# - Budget alerts
+# - Cost allocation and chargeback
+#
+# Free vs Enterprise:
+# - Free: Full cost monitoring, basic features
+# - Enterprise: Multi-cluster, SSO, advanced alerts, long-term retention
+#
+# Cost Estimation (Kubecost overhead):
+# - Memory: ~500MB-1GB
+# - CPU: ~0.5-1 core
+# - Storage: ~2GB (default retention: 15 days)
+# - Cost: Free tier available, Enterprise pricing on request

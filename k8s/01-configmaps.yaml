@@ -1,0 +1,66 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lightrag-config
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/component: config
+data:
+  # Core Configuration
+  PUBLISH_DOMAIN: "dev.localhost"
+  COMPOSE_PROJECT_NAME: "lightrag"
+
+  # Caddy Configuration
+  CADDY_DOCKER_NETWORK: "lightrag_frontend"
+
+  # Database URLs (non-sensitive parts)
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  QDRANT_URL: "http://qdrant:6333"
+  MEMGRAPH_URI: "bolt://memgraph:7687"
+
+  # LightRAG Server Configuration
+  HOST: "0.0.0.0"
+  PORT: "9621"
+  WORKERS: "6"
+
+  # LightRAG Storage Configuration
+  LIGHTRAG_KV_STORAGE: "RedisKVStorage"
+  LIGHTRAG_VECTOR_STORAGE: "QdrantVectorDBStorage"
+  LIGHTRAG_GRAPH_STORAGE: "MemgraphStorage"
+
+  # LLM Configuration
+  LLM_BINDING: "openai"
+  LLM_MODEL: "gpt-4o-mini"
+  EMBEDDING_BINDING: "openai"
+  EMBEDDING_MODEL: "text-embedding-3-small"
+
+  # Performance Configuration
+  MAX_PARALLEL_INSERT: "4"
+  MAX_ASYNC: "8"
+  LLM_API_TIMEOUT: "120"
+  LLM_API_RETRY_ATTEMPTS: "3"
+  LLM_CONNECTION_POOL_SIZE: "20"
+  EMBEDDING_BATCH_SIZE: "100"
+
+  # Node Options
+  NODE_OPTIONS: "--max_old_space_size=2048"
+
+  # LobeChat Configuration
+  NEXT_PUBLIC_APP_NAME: "LobeChat + LightRAG"
+  DEFAULT_AGENT_CONFIG: '{"model":"lightrag","systemRole":"AI assistant with graph knowledge"}'
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lobechat-config
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/component: config
+    app.kubernetes.io/name: lobechat
+data:
+  OLLAMA_PROXY_URL: "http://lightrag:9621/v1"
+  NEXT_PUBLIC_APP_NAME: "LobeChat + LightRAG"
+  DEFAULT_AGENT_CONFIG: '{"model":"lightrag","systemRole":"AI assistant with graph knowledge"}'

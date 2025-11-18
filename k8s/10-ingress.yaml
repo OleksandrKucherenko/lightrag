@@ -1,0 +1,176 @@
+---
+# Ingress configuration for LightRAG stack
+# This uses NGINX Ingress Controller annotations
+# Adjust according to your ingress controller (Traefik, HAProxy, etc.)
+#
+# Prerequisites:
+# 1. Install NGINX Ingress Controller:
+#    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.10.0/deploy/static/provider/cloud/deploy.yaml
+#
+# 2. For local development (minikube):
+#    minikube addons enable ingress
+#
+# 3. Update your /etc/hosts or DNS:
+#    <ingress-ip> dev.localhost
+#    <ingress-ip> chat.dev.localhost
+#    <ingress-ip> lobechat.dev.localhost
+#    <ingress-ip> rag.dev.localhost
+#    <ingress-ip> api.dev.localhost
+#    <ingress-ip> graph.dev.localhost
+#    <ingress-ip> vector.dev.localhost
+#    <ingress-ip> monitor.dev.localhost
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lightrag-ingress
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: lightrag-ingress
+    app.kubernetes.io/component: networking
+  annotations:
+    # NGINX Ingress Controller annotations
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Increase timeouts for LLM operations
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    # Client body size for document uploads
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    # Enable CORS for API endpoints
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    # For cert-manager (optional - uncomment if using cert-manager)
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  # TLS configuration (optional - uncomment if you have TLS certificates)
+  # tls:
+  # - hosts:
+  #   - dev.localhost
+  #   - "*.dev.localhost"
+  #   secretName: lightrag-tls
+  rules:
+  # Main domain - returns info page
+  - host: dev.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: lobechat
+            port:
+              number: 3210
+
+  # LobeChat - Main chat interface
+  - host: chat.dev.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: lobechat
+            port:
+              number: 3210
+
+  # LobeChat - Alternative subdomain
+  - host: lobechat.dev.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: lobechat
+            port:
+              number: 3210
+
+  # LightRAG API - Main endpoint
+  - host: rag.dev.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: lightrag
+            port:
+              number: 9621
+
+  # LightRAG API - Alternative API subdomain (for CORS-free integration)
+  - host: api.dev.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: lightrag
+            port:
+              number: 9621
+
+  # Memgraph Lab - Graph visualization
+  - host: graph.dev.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: memgraph-lab
+            port:
+              number: 3000
+
+  # Qdrant - Vector database UI
+  - host: vector.dev.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: qdrant
+            port:
+              number: 6333
+
+  # Monitor - Isaiah/LazyDocker web UI (optional)
+  - host: monitor.dev.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: monitor
+            port:
+              number: 3000
+
+---
+# Alternative: Traefik Ingress Configuration
+# Uncomment if using Traefik instead of NGINX
+#
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: lightrag-ingress-traefik
+#   namespace: lightrag
+#   annotations:
+#     traefik.ingress.kubernetes.io/router.entrypoints: websecure
+#     traefik.ingress.kubernetes.io/router.tls: "true"
+# spec:
+#   ingressClassName: traefik
+#   rules:
+#   - host: chat.dev.localhost
+#     http:
+#       paths:
+#       - path: /
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: lobechat
+#             port:
+#               number: 3210
+#   # Add other rules similar to NGINX configuration above

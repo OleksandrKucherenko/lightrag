@@ -1,0 +1,90 @@
+---
+# Note: This monitoring service (Isaiah) is designed for Docker environments
+# In Kubernetes, consider using native monitoring tools like:
+# - Kubernetes Dashboard
+# - Lens (https://k8slens.dev/)
+# - k9s (https://k9scli.io/)
+# - Prometheus + Grafana
+#
+# This deployment is included for compatibility but may have limited functionality
+# without access to Docker socket
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitor
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: monitor
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: lightrag-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: monitor
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: monitor
+        app.kubernetes.io/component: monitoring
+    spec:
+      containers:
+      - name: monitor
+        image: ghcr.io/will-moss/isaiah:1.30.0
+        ports:
+        - name: http
+          containerPort: 3000
+          protocol: TCP
+        # Note: The following volume mount would require privileged access
+        # and is not recommended in production Kubernetes environments
+        # volumeMounts:
+        # - name: docker-sock
+        #   mountPath: /var/run/docker.sock
+        #   readOnly: true
+        resources:
+          limits:
+            memory: 1Gi
+            cpu: 500m
+          requests:
+            memory: 512Mi
+            cpu: 250m
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 1
+      # Note: Uncomment only if you understand the security implications
+      # volumes:
+      # - name: docker-sock
+      #   hostPath:
+      #     path: /var/run/docker.sock
+      #     type: Socket
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: monitor
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: monitor
+    app.kubernetes.io/component: monitoring
+spec:
+  type: ClusterIP
+  ports:
+  - port: 3000
+    targetPort: 3000
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: monitor

@@ -1,0 +1,81 @@
+name: Configuration Sync Check
+
+on:
+  pull_request:
+    paths:
+      - 'docker-compose.yaml'
+      - 'k8s/*.yaml'
+      - 'helm/lightrag/values.yaml'
+      - '.github/workflows/config-sync-check.yml'
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check-config-sync:
+    runs-on: ubuntu-latest
+    name: Validate Configuration Synchronization
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Run configuration sync check
+        id: sync_check
+        env:
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO_URL: ${{ github.event.pull_request.head.repo.html_url }}
+        run: |
+          ./scripts/ci-config-sync.sh /tmp/sync-report.md
+
+      - name: Post sync report as PR comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const syncReport = fs.readFileSync('/tmp/sync-report.md', 'utf8');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment => {
+              const isBot = comment.user.type === 'Bot' || comment.user.login === 'github-actions[bot]';
+              const hasSyncCheck = comment.body.includes('🔄 Configuration Sync Check');
+              return isBot && hasSyncCheck;
+            });
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: syncReport
+              });
+              console.log(`✅ Updated existing sync check comment (ID: ${botComment.id})`);
+            } else {
+              const { data: newComment } = await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: syncReport
+              });
+              console.log(`✅ Created new sync check comment (ID: ${newComment.id})`);
+            }
+
+      - name: Generate sync summary for job summary
+        if: always()
+        run: |
+          cat /tmp/sync-report.md >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,24 @@
+apiVersion: v2
+name: lightrag
+description: A Helm chart for deploying LightRAG stack with all dependencies
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - lightrag
+  - rag
+  - ai
+  - llm
+  - knowledge-graph
+  - vector-database
+home: https://github.com/HKUDS/LightRAG
+sources:
+  - https://github.com/HKUDS/LightRAG
+maintainers:
+  - name: LightRAG Team
+    url: https://github.com/HKUDS/LightRAG
+icon: https://raw.githubusercontent.com/HKUDS/LightRAG/main/docs/lightrag-web-ui.png
+dependencies: []
+annotations:
+  category: AI/ML
+  licenses: Apache-2.0

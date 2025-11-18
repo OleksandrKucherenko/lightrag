@@ -1,0 +1,165 @@
+******************************************************************************
+***   LightRAG has been successfully deployed!                          ***
+******************************************************************************
+
+Chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+Release: {{ .Release.Name }}
+Namespace: {{ .Values.namespace.name }}
+
+================================================================================
+IMPORTANT: Configuration Steps
+================================================================================
+
+{{- if not (or .Values.secrets.llmBindingApiKey .Values.secrets.openaiApiKey) }}
+
+⚠️  WARNING: Default API keys detected!
+   Please update your secrets with actual API keys:
+
+   helm upgrade {{ .Release.Name }} . \
+     --set secrets.llmBindingApiKey="sk-your-actual-key" \
+     --set secrets.embeddingBindingApiKey="sk-your-actual-key" \
+     --set secrets.openaiApiKey="sk-your-actual-key"
+
+{{- end }}
+
+================================================================================
+Service Status
+================================================================================
+
+1. Check deployment status:
+
+   kubectl get pods -n {{ .Values.namespace.name }}
+   kubectl get svc -n {{ .Values.namespace.name }}
+
+2. Wait for all pods to be ready:
+
+   kubectl wait --for=condition=ready pod \
+     --all -n {{ .Values.namespace.name }} \
+     --timeout=300s
+
+================================================================================
+Access Your Services
+================================================================================
+
+{{- if .Values.ingress.enabled }}
+
+Via Ingress (ensure DNS is configured):
+
+  Main:         https://{{ include "lightrag.publishDomain" . }}
+  LobeChat:     https://chat.{{ include "lightrag.publishDomain" . }}
+  LightRAG API: https://rag.{{ include "lightrag.publishDomain" . }}
+  Memgraph Lab: https://graph.{{ include "lightrag.publishDomain" . }}
+  Qdrant UI:    https://vector.{{ include "lightrag.publishDomain" . }}
+{{- if .Values.monitor.enabled }}
+  Monitor:      https://monitor.{{ include "lightrag.publishDomain" . }}
+{{- end }}
+
+DNS Configuration:
+  Get your ingress IP:
+    kubectl get ingress -n {{ .Values.namespace.name }}
+
+  Add to /etc/hosts:
+    <INGRESS_IP> {{ include "lightrag.publishDomain" . }}
+    <INGRESS_IP> chat.{{ include "lightrag.publishDomain" . }}
+    <INGRESS_IP> rag.{{ include "lightrag.publishDomain" . }}
+    <INGRESS_IP> graph.{{ include "lightrag.publishDomain" . }}
+    <INGRESS_IP> vector.{{ include "lightrag.publishDomain" . }}
+{{- if .Values.monitor.enabled }}
+    <INGRESS_IP> monitor.{{ include "lightrag.publishDomain" . }}
+{{- end }}
+
+{{- else }}
+
+Via Port Forwarding:
+
+  # LobeChat
+  kubectl port-forward -n {{ .Values.namespace.name }} svc/lobechat {{ .Values.lobechat.service.port }}:{{ .Values.lobechat.service.port }}
+  Access: http://localhost:{{ .Values.lobechat.service.port }}
+
+  # LightRAG API
+  kubectl port-forward -n {{ .Values.namespace.name }} svc/lightrag {{ .Values.lightrag.service.port }}:{{ .Values.lightrag.service.port }}
+  Access: http://localhost:{{ .Values.lightrag.service.port }}
+
+  # Memgraph Lab
+  kubectl port-forward -n {{ .Values.namespace.name }} svc/memgraph-lab {{ .Values.memgraph.lab.service.port }}:{{ .Values.memgraph.lab.service.port }}
+  Access: http://localhost:{{ .Values.memgraph.lab.service.port }}
+
+  # Qdrant
+  kubectl port-forward -n {{ .Values.namespace.name }} svc/qdrant {{ .Values.qdrant.service.httpPort }}:{{ .Values.qdrant.service.httpPort }}
+  Access: http://localhost:{{ .Values.qdrant.service.httpPort }}
+
+{{- end }}
+
+================================================================================
+Monitoring & Troubleshooting
+================================================================================
+
+View logs:
+
+  # LightRAG
+  kubectl logs -n {{ .Values.namespace.name }} -l app.kubernetes.io/component=application --tail=100 -f
+
+  # LobeChat
+  kubectl logs -n {{ .Values.namespace.name }} -l app.kubernetes.io/component=frontend --tail=100 -f
+
+  # All services
+  kubectl logs -n {{ .Values.namespace.name }} --all-containers --tail=100 -f
+
+Check resource usage:
+
+  kubectl top pods -n {{ .Values.namespace.name }}
+
+Check events:
+
+  kubectl get events -n {{ .Values.namespace.name }} --sort-by='.lastTimestamp'
+
+================================================================================
+Scaling
+================================================================================
+
+Scale LobeChat:
+
+  kubectl scale deployment lobechat --replicas=3 -n {{ .Values.namespace.name }}
+
+Scale LightRAG:
+
+  kubectl scale deployment lightrag --replicas=2 -n {{ .Values.namespace.name }}
+
+Or via Helm:
+
+  helm upgrade {{ .Release.Name }} . \
+    --set lobechat.replicaCount=3 \
+    --set lightrag.replicaCount=2
+
+================================================================================
+Useful Commands
+================================================================================
+
+Get all resources:
+
+  kubectl get all -n {{ .Values.namespace.name }}
+
+Describe a pod:
+
+  kubectl describe pod <pod-name> -n {{ .Values.namespace.name }}
+
+Execute command in pod:
+
+  kubectl exec -it <pod-name> -n {{ .Values.namespace.name }} -- /bin/sh
+
+Check storage:
+
+  kubectl get pvc -n {{ .Values.namespace.name }}
+
+================================================================================
+Documentation
+================================================================================
+
+For more information:
+  - Chart README: https://github.com/HKUDS/LightRAG
+  - Kubernetes docs: https://kubernetes.io/docs/
+  - Helm docs: https://helm.sh/docs/
+
+================================================================================
+
+Happy knowledge graphing with LightRAG! 🚀

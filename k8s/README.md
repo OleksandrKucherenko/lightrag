@@ -79,6 +79,30 @@ You need valid API keys for:
 - OpenAI API (or compatible LLM provider)
 - OpenAI Embedding API (or compatible provider)
 
+### Cloud Provider Deployment
+
+**Deploying to a cloud provider?** See our comprehensive [Cloud Deployment Guide](CLOUD_DEPLOYMENT.md) for detailed instructions on:
+
+- **Azure (AKS)** - Azure Kubernetes Service
+- **AWS (EKS)** - Elastic Kubernetes Service
+- **Google Cloud (GKE)** - Google Kubernetes Engine
+- **DigitalOcean (DOKS)** - DigitalOcean Kubernetes
+- **Civo** - Civo Kubernetes
+
+The guide includes:
+- Step-by-step cluster creation
+- Storage and networking configuration
+- DNS and SSL setup
+- Cost estimates and comparisons
+- Provider-specific optimizations
+
+**Quick cost comparison:**
+- Civo: ~$75/month (most affordable)
+- DigitalOcean: ~$186/month (great value)
+- Azure: ~$385/month (enterprise features)
+- AWS: ~$437/month (most flexible)
+- Google Cloud: ~$523/month (best for AI/ML)
+
 ## Architecture
 
 ### Service Dependencies

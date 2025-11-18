@@ -19,8 +19,11 @@ k8s/
 ├── 10-ingress.yaml            # Ingress configuration
 ├── kustomization.yaml         # Kustomize configuration
 ├── deploy.sh                  # Deployment helper script
+├── validate.sh                # Validation script (78 checks)
 ├── README.md                  # Full documentation
-└── MANIFEST.md                # This file
+├── MANIFEST.md                # This file
+├── TESTING.md                 # Testing guide with Kind
+└── CLOUD_DEPLOYMENT.md        # Cloud provider deployment guides
 ```
 
 ## Resource Breakdown
@@ -284,6 +287,9 @@ kubectl scale deployment lightrag --replicas=2 -n lightrag
 ## Related Documentation
 
 - [Full Kubernetes README](README.md) - Complete deployment guide
+- [Cloud Deployment Guide](CLOUD_DEPLOYMENT.md) - Deploy to Azure, AWS, GCP, DigitalOcean, Civo
+- [Testing Guide](TESTING.md) - Local testing with Kind, performance testing
+- [Helm Chart README](../helm/lightrag/README.md) - Helm deployment instructions
 - [Main README](../README.md) - Project overview
 - [Docker Compose](../docker-compose.yaml) - Alternative deployment
 

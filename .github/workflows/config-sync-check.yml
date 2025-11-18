@@ -85,37 +85,25 @@ jobs:
           # Read the detailed output
           DETAILED_OUTPUT=$(cat /tmp/sync-check-output.txt)
 
-          # Escape special characters for markdown
-          DETAILED_OUTPUT_ESCAPED=$(echo "$DETAILED_OUTPUT" | sed 's/\\/\\\\/g' | sed 's/`/\\`/g')
-
-          # Create markdown report
-          cat > /tmp/sync-report.md << 'EOFMARKER'
+          # Create markdown report using unquoted heredoc for variable expansion
+          cat > /tmp/sync-report.md << EOFMARKER
 ## 🔄 Configuration Sync Check
 
-> **Analysis based on commit:** [`COMMIT_SHORT_PLACEHOLDER`](${{ github.event.pull_request.head.repo.html_url }}/commit/COMMIT_SHA_PLACEHOLDER)
-> **Generated at:** TIMESTAMP_PLACEHOLDER
+> **Analysis based on commit:** [\`${COMMIT_SHORT}\`](${{ github.event.pull_request.head.repo.html_url }}/commit/${COMMIT_SHA})
+> **Generated at:** ${TIMESTAMP}
 
 ### Summary
 
-STATUS_PLACEHOLDER
+${STATUS}
 
-SUMMARY_PLACEHOLDER
+${SUMMARY}
 
 ### Results
 
-- **Warnings:** WARNINGS_PLACEHOLDER
-- **Errors:** ERRORS_PLACEHOLDER
+- **Warnings:** ${WARNINGS}
+- **Errors:** ${ERRORS}
 
 EOFMARKER
-
-          # Replace placeholders
-          sed -i "s|COMMIT_SHORT_PLACEHOLDER|$COMMIT_SHORT|g" /tmp/sync-report.md
-          sed -i "s|COMMIT_SHA_PLACEHOLDER|$COMMIT_SHA|g" /tmp/sync-report.md
-          sed -i "s|TIMESTAMP_PLACEHOLDER|$TIMESTAMP|g" /tmp/sync-report.md
-          sed -i "s|STATUS_PLACEHOLDER|$STATUS|g" /tmp/sync-report.md
-          sed -i "s|SUMMARY_PLACEHOLDER|$SUMMARY|g" /tmp/sync-report.md
-          sed -i "s|WARNINGS_PLACEHOLDER|$WARNINGS|g" /tmp/sync-report.md
-          sed -i "s|ERRORS_PLACEHOLDER|$ERRORS|g" /tmp/sync-report.md
 
           # Add detailed findings if there are issues
           if [ "$ERRORS" -gt 0 ] || [ "$WARNINGS" -gt 0 ]; then

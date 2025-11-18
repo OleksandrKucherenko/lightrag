@@ -1,0 +1,209 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lightrag
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: lightrag
+    app.kubernetes.io/component: application
+    app.kubernetes.io/part-of: lightrag-stack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: lightrag
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: lightrag
+        app.kubernetes.io/component: application
+    spec:
+      containers:
+      - name: lightrag
+        image: ghcr.io/hkuds/lightrag:latest
+        ports:
+        - name: http
+          containerPort: 9621
+          protocol: TCP
+        env:
+        # Server Configuration
+        - name: HOST
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: HOST
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: PORT
+        - name: WORKERS
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: WORKERS
+        # Storage Configuration
+        - name: LIGHTRAG_KV_STORAGE
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: LIGHTRAG_KV_STORAGE
+        - name: LIGHTRAG_VECTOR_STORAGE
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: LIGHTRAG_VECTOR_STORAGE
+        - name: LIGHTRAG_GRAPH_STORAGE
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: LIGHTRAG_GRAPH_STORAGE
+        # Database URLs
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: REDIS_PORT
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: lightrag-secrets
+              key: REDIS_PASSWORD
+        - name: QDRANT_URL
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: QDRANT_URL
+        - name: MEMGRAPH_URI
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: MEMGRAPH_URI
+        # LLM Configuration
+        - name: LLM_BINDING
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: LLM_BINDING
+        - name: LLM_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: LLM_MODEL
+        - name: EMBEDDING_BINDING
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: EMBEDDING_BINDING
+        - name: EMBEDDING_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: EMBEDDING_MODEL
+        # API Keys (Secrets)
+        - name: LLM_BINDING_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: lightrag-secrets
+              key: LLM_BINDING_API_KEY
+        - name: EMBEDDING_BINDING_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: lightrag-secrets
+              key: EMBEDDING_BINDING_API_KEY
+        # Performance Configuration
+        - name: MAX_PARALLEL_INSERT
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: MAX_PARALLEL_INSERT
+        - name: MAX_ASYNC
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: MAX_ASYNC
+        - name: LLM_API_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: LLM_API_TIMEOUT
+        - name: LLM_API_RETRY_ATTEMPTS
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: LLM_API_RETRY_ATTEMPTS
+        - name: LLM_CONNECTION_POOL_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: LLM_CONNECTION_POOL_SIZE
+        - name: EMBEDDING_BATCH_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: lightrag-config
+              key: EMBEDDING_BATCH_SIZE
+        volumeMounts:
+        - name: storage
+          mountPath: /app/data/rag_storage
+        - name: inputs
+          mountPath: /app/data/inputs
+        - name: logs
+          mountPath: /app/logs
+        resources:
+          limits:
+            memory: 4Gi
+            cpu: 2000m
+          requests:
+            memory: 2Gi
+            cpu: 1000m
+        livenessProbe:
+          tcpSocket:
+            port: 9621
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 9621
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 3
+      volumes:
+      - name: storage
+        persistentVolumeClaim:
+          claimName: lightrag-storage
+      - name: inputs
+        persistentVolumeClaim:
+          claimName: lightrag-inputs
+      - name: logs
+        persistentVolumeClaim:
+          claimName: lightrag-logs
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lightrag
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: lightrag
+    app.kubernetes.io/component: application
+spec:
+  type: ClusterIP
+  ports:
+  - port: 9621
+    targetPort: 9621
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: lightrag

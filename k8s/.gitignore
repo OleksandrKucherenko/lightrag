@@ -1,0 +1,27 @@
+# Kubernetes Secrets - NEVER COMMIT!
+# Exception: 02-secrets.yaml is a template with placeholders
+*-secrets.yaml
+*-secrets-*.yaml
+secrets/*.yaml
+*.secret.yaml
+
+# Allow the template file (has only placeholders)
+!02-secrets.yaml
+
+# Environment-specific configurations
+*.local.yaml
+*.prod.yaml
+*.dev.yaml
+
+# Generated files
+*-generated.yaml
+kustomization-*.yaml
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Temporary files
+*.tmp
+.DS_Store

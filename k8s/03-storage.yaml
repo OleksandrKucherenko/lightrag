@@ -1,0 +1,154 @@
+---
+# Redis Data Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  # Uncomment and set your storage class if needed
+  # storageClassName: standard
+
+---
+# Memgraph Data Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: memgraph-data
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: memgraph
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# Memgraph Log Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: memgraph-log
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: memgraph
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+# Qdrant Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qdrant-storage
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: qdrant
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# Qdrant Snapshots
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qdrant-snapshots
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: qdrant
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# LightRAG Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lightrag-storage
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: lightrag
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+# LightRAG Inputs
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lightrag-inputs
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: lightrag
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+# LightRAG Logs
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lightrag-logs
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: lightrag
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+# LobeChat Data Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lobechat-data
+  namespace: lightrag
+  labels:
+    app.kubernetes.io/name: lobechat
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

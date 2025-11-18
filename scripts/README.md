@@ -63,7 +63,11 @@ Automatically runs on PRs when `helm/lightrag/values.yaml` or `k8s/*.yaml` files
 
 **Usage**:
 ```bash
+# Interactive mode with colors
 ./scripts/sync-config.sh
+
+# CI mode without colors (for automation)
+./scripts/sync-config.sh --ci
 ```
 
 **What it checks**:
@@ -76,6 +80,12 @@ Automatically runs on PRs when `helm/lightrag/values.yaml` or `k8s/*.yaml` files
 **Exit codes**:
 - `0`: Check passed or warnings only
 - `1`: Check failed with errors
+
+**GitHub Actions Integration**:
+Automatically runs on PRs when `docker-compose.yaml`, `k8s/*.yaml`, or `helm/lightrag/values.yaml` files change. Posts sync status as PR comment with:
+- ✅ All synchronized / ⚠️ Warnings detected / ❌ Errors detected
+- Detailed drift report with recommendations
+- Commit hash tracking
 
 **Requirements**:
 - `yq` (optional, for enhanced checks): `brew install yq` or https://github.com/mikefarah/yq

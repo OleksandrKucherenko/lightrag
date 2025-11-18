@@ -6,8 +6,18 @@
 # and Kubernetes manifests, ensuring changes made during local development
 # are properly reflected in production configurations.
 #
+# Usage:
+#   ./sync-config.sh         # Interactive mode with colors
+#   ./sync-config.sh --ci    # CI mode without colors, structured output
+#
 
 set -euo pipefail
+
+# Check for CI mode
+CI_MODE=false
+if [ "${1:-}" = "--ci" ]; then
+    CI_MODE=true
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -15,12 +25,20 @@ DOCKER_COMPOSE="$PROJECT_ROOT/docker-compose.yaml"
 K8S_DIR="$PROJECT_ROOT/k8s"
 HELM_VALUES="$PROJECT_ROOT/helm/lightrag/values.yaml"
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Colors for output (disabled in CI mode)
+if [ "$CI_MODE" = true ]; then
+    RED=''
+    GREEN=''
+    YELLOW=''
+    BLUE=''
+    NC=''
+else
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[1;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m' # No Color
+fi
 
 # Counters
 WARNINGS=0
@@ -73,14 +91,16 @@ get_helm_image_version() {
     fi
 }
 
-# Check if yq is installed
+# Check if yq is installed (mikefarah's version, not python-yq)
 check_yq() {
-    if ! command -v yq &> /dev/null; then
-        print_warning "yq not installed. Some checks will be limited."
-        print_info "Install yq: brew install yq (macOS) or https://github.com/mikefarah/yq"
-        return 1
+    if command -v yq &> /dev/null; then
+        # Check if it's the right yq (mikefarah's version, not python-yq)
+        if yq --version 2>&1 | grep -q "mikefarah"; then
+            return 0
+        fi
     fi
-    return 0
+    # yq not installed or wrong version
+    return 1
 }
 
 # Compare image versions

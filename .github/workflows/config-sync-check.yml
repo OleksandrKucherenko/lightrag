@@ -1,0 +1,227 @@
+name: Configuration Sync Check
+
+on:
+  pull_request:
+    paths:
+      - 'docker-compose.yaml'
+      - 'k8s/*.yaml'
+      - 'helm/lightrag/values.yaml'
+      - '.github/workflows/config-sync-check.yml'
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check-config-sync:
+    runs-on: ubuntu-latest
+    name: Validate Configuration Synchronization
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install yq (optional, script has fallback)
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: Run configuration sync check
+        id: sync_check
+        run: |
+          # Run sync check and capture output (use --ci for clean output)
+          set +e  # Don't exit on error
+          OUTPUT=$(./scripts/sync-config.sh --ci 2>&1)
+          EXIT_CODE=$?
+          set -e
+
+          # Save output to file for later use
+          echo "$OUTPUT" > /tmp/sync-check-output.txt
+
+          # Extract warning and error counts from output
+          WARNINGS=$(echo "$OUTPUT" | grep "^Warnings:" | awk '{print $2}' || echo "0")
+          ERRORS=$(echo "$OUTPUT" | grep "^Errors:" | awk '{print $2}' || echo "0")
+
+          echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
+          echo "errors=$ERRORS" >> $GITHUB_OUTPUT
+          echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+          echo "Configuration sync check completed"
+          echo "Warnings: $WARNINGS"
+          echo "Errors: $ERRORS"
+          echo "Exit code: $EXIT_CODE"
+
+      - name: Generate sync report
+        id: report
+        run: |
+          # Get commit hash and timestamp
+          COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
+          COMMIT_SHORT="${COMMIT_SHA:0:7}"
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+          WARNINGS=${{ steps.sync_check.outputs.warnings }}
+          ERRORS=${{ steps.sync_check.outputs.errors }}
+          EXIT_CODE=${{ steps.sync_check.outputs.exit_code }}
+
+          # Determine status
+          if [ "$ERRORS" -gt 0 ]; then
+            STATUS="❌ **Configuration drift detected with errors**"
+            EMOJI="❌"
+            SUMMARY="This PR has configuration inconsistencies that need to be addressed."
+          elif [ "$WARNINGS" -gt 0 ]; then
+            STATUS="⚠️ **Configuration drift detected with warnings**"
+            EMOJI="⚠️"
+            SUMMARY="This PR has minor configuration inconsistencies. Review recommended."
+          else
+            STATUS="✅ **All configurations are synchronized**"
+            EMOJI="✅"
+            SUMMARY="Docker Compose and Kubernetes configurations are properly synchronized."
+          fi
+
+          # Read the detailed output
+          DETAILED_OUTPUT=$(cat /tmp/sync-check-output.txt)
+
+          # Escape special characters for markdown
+          DETAILED_OUTPUT_ESCAPED=$(echo "$DETAILED_OUTPUT" | sed 's/\\/\\\\/g' | sed 's/`/\\`/g')
+
+          # Create markdown report
+          cat > /tmp/sync-report.md << 'EOFMARKER'
+## 🔄 Configuration Sync Check
+
+> **Analysis based on commit:** [`COMMIT_SHORT_PLACEHOLDER`](${{ github.event.pull_request.head.repo.html_url }}/commit/COMMIT_SHA_PLACEHOLDER)
+> **Generated at:** TIMESTAMP_PLACEHOLDER
+
+### Summary
+
+STATUS_PLACEHOLDER
+
+SUMMARY_PLACEHOLDER
+
+### Results
+
+- **Warnings:** WARNINGS_PLACEHOLDER
+- **Errors:** ERRORS_PLACEHOLDER
+
+EOFMARKER
+
+          # Replace placeholders
+          sed -i "s|COMMIT_SHORT_PLACEHOLDER|$COMMIT_SHORT|g" /tmp/sync-report.md
+          sed -i "s|COMMIT_SHA_PLACEHOLDER|$COMMIT_SHA|g" /tmp/sync-report.md
+          sed -i "s|TIMESTAMP_PLACEHOLDER|$TIMESTAMP|g" /tmp/sync-report.md
+          sed -i "s|STATUS_PLACEHOLDER|$STATUS|g" /tmp/sync-report.md
+          sed -i "s|SUMMARY_PLACEHOLDER|$SUMMARY|g" /tmp/sync-report.md
+          sed -i "s|WARNINGS_PLACEHOLDER|$WARNINGS|g" /tmp/sync-report.md
+          sed -i "s|ERRORS_PLACEHOLDER|$ERRORS|g" /tmp/sync-report.md
+
+          # Add detailed findings if there are issues
+          if [ "$ERRORS" -gt 0 ] || [ "$WARNINGS" -gt 0 ]; then
+            cat >> /tmp/sync-report.md << 'EOF'
+
+### Detailed Findings
+
+<details>
+<summary>Click to expand full sync check output</summary>
+
+```
+EOF
+            cat /tmp/sync-check-output.txt >> /tmp/sync-report.md
+            cat >> /tmp/sync-report.md << 'EOF'
+```
+
+</details>
+
+---
+
+### 📋 Sync Checklist
+
+When syncing configurations, ensure you update:
+
+- [ ] **Image Versions**: docker-compose.yaml → k8s/*.yaml + helm/lightrag/values.yaml
+- [ ] **Environment Variables**: .env files → k8s/01-configmaps.yaml + helm values
+- [ ] **Ports**: Ensure consistency across all configurations
+- [ ] **Resource Limits**: Update K8s/Helm resource definitions appropriately
+- [ ] **Secrets**: Update k8s/02-secrets.yaml template (never commit real secrets!)
+
+**Workflow**:
+1. Review the drift report above
+2. Sync changes from docker-compose.yaml to k8s/Helm configs
+3. Run `./scripts/sync-config.sh` locally to verify
+4. Push updates to this PR
+
+📖 See [Development Workflow Guide](../blob/main/docs/DEVELOPMENT_WORKFLOW.md) for detailed sync procedures.
+EOF
+          fi
+
+          # Add footer
+          cat >> /tmp/sync-report.md << 'EOF'
+
+---
+<sub>🤖 This comment will be automatically updated when new commits are pushed.</sub>
+EOF
+
+      - name: Post sync report as PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const syncReport = fs.readFileSync('/tmp/sync-report.md', 'utf8');
+
+            // Find existing sync check comment from this bot
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            // Look for existing configuration sync comment
+            // Check both user.type === 'Bot' and user.login === 'github-actions[bot]'
+            const botComment = comments.find(comment => {
+              const isBot = comment.user.type === 'Bot' || comment.user.login === 'github-actions[bot]';
+              const hasSyncCheck = comment.body.includes('🔄 Configuration Sync Check');
+              return isBot && hasSyncCheck;
+            });
+
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: syncReport
+              });
+              console.log(`✅ Updated existing sync check comment (ID: ${botComment.id})`);
+            } else {
+              // Create new comment
+              const { data: newComment } = await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: syncReport
+              });
+              console.log(`✅ Created new sync check comment (ID: ${newComment.id})`);
+            }
+
+            console.log(`🔄 Configuration sync check for commit: ${{ github.event.pull_request.head.sha }}`);
+
+      - name: Generate sync summary for job summary
+        run: |
+          cat /tmp/sync-report.md >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Quick Reference" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Scripts:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Run locally: \`./scripts/sync-config.sh\`" >> $GITHUB_STEP_SUMMARY
+          echo "- View documentation: \`docs/DEVELOPMENT_WORKFLOW.md\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Exit Code:** ${{ steps.sync_check.outputs.exit_code }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Set workflow status
+        if: steps.sync_check.outputs.errors > 0
+        run: |
+          echo "::error::Configuration sync check failed with ${{ steps.sync_check.outputs.errors }} errors"
+          exit 1

@@ -351,9 +351,21 @@ fi
 
 ### CI/CD Integration
 
-Add to your CI pipeline (`.github/workflows/validate-config.yml`):
+**Automated PR Checks (Already Configured)**: Configuration sync validation runs automatically on pull requests via `.github/workflows/config-sync-check.yml`. When you create or update a PR that modifies configuration files, the workflow will:
+
+1. Run `./scripts/sync-config.sh --ci` to check for drift
+2. Post a comment to the PR with:
+   - ✅ All synchronized / ⚠️ Warnings / ❌ Errors
+   - Detailed drift findings (expandable section)
+   - Sync checklist and recommendations
+   - Commit hash and timestamp
+3. Update the same comment on new commits (single comment per PR)
+4. Fail CI if configuration errors are detected
+
+**Manual CI/CD Integration** (for other CI systems like GitLab CI, Jenkins, etc.):
 
 ```yaml
+# Example for other CI systems
 name: Validate Configuration Sync
 
 on:
@@ -369,25 +381,13 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install yq
+      - name: Install yq (optional)
         run: |
           sudo wget -O /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
       - name: Run sync validation
-        run: ./scripts/sync-config.sh
-
-      - name: Comment on PR
-        if: failure()
-        uses: actions/github-script@v6
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '⚠️ Configuration sync check failed. Please ensure docker-compose changes are reflected in k8s/helm configs.'
-            })
+        run: ./scripts/sync-config.sh --ci
 ```
 
 ## Best Practices

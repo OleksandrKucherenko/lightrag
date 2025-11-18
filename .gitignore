@@ -39,3 +39,6 @@ docker/data/lobechat/*
 .windsurf/workflows
 .codex/
 specs/
+
+# MCP configuration
+.mcp.json

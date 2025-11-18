@@ -137,6 +137,58 @@ View release history:
 helm history lightrag -n lightrag
 ```
 
+## Maintenance
+
+For production deployments, see our comprehensive [Cluster Maintenance Guide](../../k8s/CLUSTER_MAINTENANCE.md) which covers:
+
+- **Secret Rotation**: Using Helm secrets and external secret management
+- **Cluster Scaling**: Horizontal pod autoscaling, resource management
+- **Service Management**: Rolling updates with Helm, node maintenance
+- **Backup & Recovery**: Velero integration with Helm
+- **Multi-Region Setup**: Geographic distribution strategies
+- **Monitoring**: Prometheus, Grafana setup for Helm deployments
+- **Emergency Procedures**: Recovery procedures for Helm-based deployments
+
+### Helm-Specific Maintenance Commands
+
+```bash
+# Check release status
+helm status lightrag -n lightrag
+
+# Upgrade with new values
+helm upgrade lightrag . -f my-values.yaml
+
+# Rollback to previous version
+helm rollback lightrag 1 -n lightrag
+
+# View release history
+helm history lightrag -n lightrag
+
+# Scale with Helm (update values and upgrade)
+helm upgrade lightrag . --set lightrag.replicaCount=3
+
+# Restart services
+helm upgrade lightrag . --set lightrag.revisionHistoryLimit=0
+
+# Add monitoring
+helm upgrade lightrag . --set monitoring.enabled=true
+```
+
+### Environment-Specific Values
+
+Create separate values files for different environments:
+
+```bash
+# Development
+helm install lightrag . -f values-dev.yaml
+
+# Staging
+helm install lightrag . -f values-staging.yaml
+
+# Production
+helm install lightrag . -f values-prod.yaml
+```
+
 ## Development
 
 Test the chart:

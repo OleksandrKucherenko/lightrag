@@ -26,6 +26,7 @@ This directory contains **plain Kubernetes manifests** for deploying the LightRA
 - [Monitoring](#monitoring)
 - [Troubleshooting](#troubleshooting)
 - [Cleanup](#cleanup)
+- [Maintenance](#maintenance)
 
 ## Overview
 
@@ -886,6 +887,37 @@ kubectl create secret generic lightrag-secrets \
   --from-env-file=../.env.secrets \
   --namespace=lightrag \
   --dry-run=client -o yaml > 02-secrets-generated.yaml
+```
+
+## Maintenance
+
+For production deployments, regular maintenance is essential. See our comprehensive [Cluster Maintenance Guide](CLUSTER_MAINTENANCE.md) for:
+
+- **Secret Rotation**: API keys, database passwords, certificates
+- **Cluster Scaling**: Horizontal/vertical scaling, auto-scaling
+- **Service Management**: Rolling updates, node maintenance, troubleshooting
+- **Backup & Recovery**: Automated backups, disaster recovery procedures
+- **Multi-Region Setup**: Geographic distribution, global load balancing
+- **Monitoring**: Prometheus, Grafana, alerting setup
+- **Emergency Procedures**: Complete outage recovery, data corruption handling
+
+### Quick Maintenance Commands
+
+```bash
+# Health check
+kubectl get pods -n lightrag
+kubectl top pods -n lightrag
+
+# Restart services
+kubectl rollout restart deployment/lightrag -n lightrag
+kubectl rollout restart deployment/lobechat -n lightrag
+
+# Scale up/down
+kubectl scale deployment lightrag --replicas=3 -n lightrag
+kubectl scale deployment lightrag --replicas=1 -n lightrag
+
+# Check logs
+kubectl logs -n lightrag deployment/lightrag --tail=100 -f
 ```
 
 ## Support

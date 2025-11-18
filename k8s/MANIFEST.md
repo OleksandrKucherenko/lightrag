@@ -289,6 +289,7 @@ kubectl scale deployment lightrag --replicas=2 -n lightrag
 - [Full Kubernetes README](README.md) - Complete deployment guide
 - [Cloud Deployment Guide](CLOUD_DEPLOYMENT.md) - Deploy to Azure, AWS, GCP, DigitalOcean, Civo
 - [Testing Guide](TESTING.md) - Local testing with Kind, performance testing
+- [Cluster Maintenance Guide](CLUSTER_MAINTENANCE.md) - Production maintenance procedures
 - [Helm Chart README](../helm/lightrag/README.md) - Helm deployment instructions
 - [Main README](../README.md) - Project overview
 - [Docker Compose](../docker-compose.yaml) - Alternative deployment

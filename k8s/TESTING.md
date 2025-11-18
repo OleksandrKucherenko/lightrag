@@ -173,7 +173,7 @@ kubectl port-forward -n lightrag svc/lightrag 9621:9621
 Run the validation script:
 
 ```bash
-python3 validate.py
+./validate.sh
 ```
 
 This checks:
@@ -406,7 +406,7 @@ jobs:
           --timeout=90s
 
     - name: Validate manifests
-      run: python3 k8s/validate.py
+      run: ./k8s/validate.sh
 
     - name: Deploy
       run: kubectl apply -f k8s/ --recursive

@@ -353,9 +353,6 @@ calculate_costs() {
     printf "%-20s %12s\n" "GCP (GKE)" "$(format_cost $(echo "scale=2; $gcp_total / 30" | bc))"
     printf "%-20s %12s\n" "DigitalOcean (DOKS)" "$(format_cost $(echo "scale=2; $do_total / 30" | bc))"
     printf "%-20s %12s\n" "Civo" "$(format_cost $(echo "scale=2; $civo_total / 30" | bc))"
-
-    # Return totals for comparison (to stderr so they don't pollute output)
-    echo "$aws_total|$azure_total|$gcp_total|$do_total|$civo_total" >&2
 }
 
 # Generate markdown table for PR comment

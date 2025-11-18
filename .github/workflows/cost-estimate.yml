@@ -157,8 +157,33 @@ jobs:
       - name: Generate cost report
         id: report
         run: |
-          # Create markdown report
-          cat > /tmp/cost-report.md << 'EOFMARKER'
+          # Pre-calculate daily and yearly values
+          AWS_DAILY=$(echo "scale=2; ${{ steps.costs.outputs.aws_diff }} / 30" | bc)
+          AWS_YEARLY=$(echo "scale=2; ${{ steps.costs.outputs.aws_diff }} * 12" | bc)
+          AZURE_DAILY=$(echo "scale=2; ${{ steps.costs.outputs.azure_diff }} / 30" | bc)
+          AZURE_YEARLY=$(echo "scale=2; ${{ steps.costs.outputs.azure_diff }} * 12" | bc)
+          GCP_DAILY=$(echo "scale=2; ${{ steps.costs.outputs.gcp_diff }} / 30" | bc)
+          GCP_YEARLY=$(echo "scale=2; ${{ steps.costs.outputs.gcp_diff }} * 12" | bc)
+          DO_DAILY=$(echo "scale=2; ${{ steps.costs.outputs.do_diff }} / 30" | bc)
+          DO_YEARLY=$(echo "scale=2; ${{ steps.costs.outputs.do_diff }} * 12" | bc)
+          CIVO_DAILY=$(echo "scale=2; ${{ steps.costs.outputs.civo_diff }} / 30" | bc)
+          CIVO_YEARLY=$(echo "scale=2; ${{ steps.costs.outputs.civo_diff }} * 12" | bc)
+
+          # Determine change status
+          CPU_CHANGE=${{ steps.costs.outputs.cpu_change }}
+          RAM_CHANGE=${{ steps.costs.outputs.ram_change }}
+          STORAGE_CHANGE=${{ steps.costs.outputs.storage_change }}
+
+          if (( $(echo "$CPU_CHANGE > 0 || $RAM_CHANGE > 0 || $STORAGE_CHANGE > 0" | bc -l) )); then
+            SUMMARY="⚠️ **This PR increases resource usage and will increase costs.**"
+          elif (( $(echo "$CPU_CHANGE < 0 || $RAM_CHANGE < 0 || $STORAGE_CHANGE < 0" | bc -l) )); then
+            SUMMARY="✅ **This PR reduces resource usage and will reduce costs.**"
+          else
+            SUMMARY="ℹ️ **This PR has no resource changes.**"
+          fi
+
+          # Create markdown report using cat with variable expansion
+          cat > /tmp/cost-report.md << EOFMARKER
           ## 💰 Cost Impact Analysis
 
           ### Resource Changes
@@ -173,41 +198,28 @@ jobs:
 
           | Provider | Current | Base | Monthly Δ | Daily Δ | Yearly Δ |
           |----------|---------|------|-----------|---------|----------|
-          | **AWS EKS** | \$${{ steps.costs.outputs.aws_current }} | \$${{ steps.costs.outputs.aws_base }} | \$${{ steps.costs.outputs.aws_diff }} | \$$(echo "scale=2; ${{ steps.costs.outputs.aws_diff }} / 30" | bc) | \$$(echo "scale=2; ${{ steps.costs.outputs.aws_diff }} * 12" | bc) |
-          | **Azure AKS** | \$${{ steps.costs.outputs.azure_current }} | \$${{ steps.costs.outputs.azure_base }} | \$${{ steps.costs.outputs.azure_diff }} | \$$(echo "scale=2; ${{ steps.costs.outputs.azure_diff }} / 30" | bc) | \$$(echo "scale=2; ${{ steps.costs.outputs.azure_diff }} * 12" | bc) |
-          | **GCP GKE** | \$${{ steps.costs.outputs.gcp_current }} | \$${{ steps.costs.outputs.gcp_base }} | \$${{ steps.costs.outputs.gcp_diff }} | \$$(echo "scale=2; ${{ steps.costs.outputs.gcp_diff }} / 30" | bc) | \$$(echo "scale=2; ${{ steps.costs.outputs.gcp_diff }} * 12" | bc) |
-          | **DigitalOcean** | \$${{ steps.costs.outputs.do_current }} | \$${{ steps.costs.outputs.do_base }} | \$${{ steps.costs.outputs.do_diff }} | \$$(echo "scale=2; ${{ steps.costs.outputs.do_diff }} / 30" | bc) | \$$(echo "scale=2; ${{ steps.costs.outputs.do_diff }} * 12" | bc) |
-          | **Civo** | \$${{ steps.costs.outputs.civo_current }} | \$${{ steps.costs.outputs.civo_base }} | \$${{ steps.costs.outputs.civo_diff }} | \$$(echo "scale=2; ${{ steps.costs.outputs.civo_diff }} / 30" | bc) | \$$(echo "scale=2; ${{ steps.costs.outputs.civo_diff }} * 12" | bc) |
+          | **AWS EKS** | \$${{ steps.costs.outputs.aws_current }} | \$${{ steps.costs.outputs.aws_base }} | \$${{ steps.costs.outputs.aws_diff }} | \$${AWS_DAILY} | \$${AWS_YEARLY} |
+          | **Azure AKS** | \$${{ steps.costs.outputs.azure_current }} | \$${{ steps.costs.outputs.azure_base }} | \$${{ steps.costs.outputs.azure_diff }} | \$${AZURE_DAILY} | \$${AZURE_YEARLY} |
+          | **GCP GKE** | \$${{ steps.costs.outputs.gcp_current }} | \$${{ steps.costs.outputs.gcp_base }} | \$${{ steps.costs.outputs.gcp_diff }} | \$${GCP_DAILY} | \$${GCP_YEARLY} |
+          | **DigitalOcean** | \$${{ steps.costs.outputs.do_current }} | \$${{ steps.costs.outputs.do_base }} | \$${{ steps.costs.outputs.do_diff }} | \$${DO_DAILY} | \$${DO_YEARLY} |
+          | **Civo** | \$${{ steps.costs.outputs.civo_current }} | \$${{ steps.costs.outputs.civo_base }} | \$${{ steps.costs.outputs.civo_diff }} | \$${CIVO_DAILY} | \$${CIVO_YEARLY} |
 
           ### Summary
 
+          ${SUMMARY}
+
+          ---
+
+          **Cost Savings Tips:**
+          - Use reserved instances for 40-60% savings on predictable workloads
+          - Enable autoscaling to optimize costs during low usage periods
+          - Review resource requests vs limits - use requests for cost planning
+          - Consider spot/preemptible instances for non-critical workloads
+
+          _Estimates based on standard instance pricing as of 2024. Actual costs may vary based on region, discounts, and usage patterns._
+
+          📊 For real-time cost monitoring after deployment, see [Cost Monitoring Guide](../blob/main/k8s/COST_MONITORING.md)
           EOFMARKER
-
-          # Add summary based on change direction
-          CPU_CHANGE=${{ steps.costs.outputs.cpu_change }}
-          RAM_CHANGE=${{ steps.costs.outputs.ram_change }}
-          STORAGE_CHANGE=${{ steps.costs.outputs.storage_change }}
-
-          if (( $(echo "$CPU_CHANGE > 0 || $RAM_CHANGE > 0 || $STORAGE_CHANGE > 0" | bc -l) )); then
-            echo "⚠️ **This PR increases resource usage and will increase costs.**" >> /tmp/cost-report.md
-          elif (( $(echo "$CPU_CHANGE < 0 || $RAM_CHANGE < 0 || $STORAGE_CHANGE < 0" | bc -l) )); then
-            echo "✅ **This PR reduces resource usage and will reduce costs.**" >> /tmp/cost-report.md
-          else
-            echo "ℹ️ **This PR has no resource changes.**" >> /tmp/cost-report.md
-          fi
-
-          echo "" >> /tmp/cost-report.md
-          echo "---" >> /tmp/cost-report.md
-          echo "" >> /tmp/cost-report.md
-          echo "**Cost Savings Tips:**" >> /tmp/cost-report.md
-          echo "- Use reserved instances for 40-60% savings on predictable workloads" >> /tmp/cost-report.md
-          echo "- Enable autoscaling to optimize costs during low usage periods" >> /tmp/cost-report.md
-          echo "- Review resource requests vs limits - use requests for cost planning" >> /tmp/cost-report.md
-          echo "- Consider spot/preemptible instances for non-critical workloads" >> /tmp/cost-report.md
-          echo "" >> /tmp/cost-report.md
-          echo "_Estimates based on standard instance pricing as of 2024. Actual costs may vary based on region, discounts, and usage patterns._" >> /tmp/cost-report.md
-          echo "" >> /tmp/cost-report.md
-          echo "📊 For real-time cost monitoring after deployment, see [Cost Monitoring Guide](../blob/main/k8s/COST_MONITORING.md)" >> /tmp/cost-report.md
 
       - name: Post cost estimate as PR comment
         uses: actions/github-script@v7

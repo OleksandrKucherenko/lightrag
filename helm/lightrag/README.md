@@ -2,6 +2,18 @@
 
 This Helm chart deploys the complete LightRAG stack to Kubernetes.
 
+> **Note**: This Helm chart is one of two deployment options. For a comparison with plain Kubernetes manifests, see [DEPLOYMENT_STRATEGY.md](../../DEPLOYMENT_STRATEGY.md).
+
+## Why Use This Helm Chart?
+
+✅ **Environment Flexibility**: Easy dev/staging/prod configurations
+✅ **Value-Driven**: Customize via `values.yaml` or `--set` flags
+✅ **Version Management**: Built-in upgrade and rollback
+✅ **Production Ready**: Follows Helm best practices
+✅ **No Code Duplication**: Single source of truth with templates
+
+**Alternative**: For simple `kubectl apply` deployments, see `../../k8s/` directory.
+
 ## Prerequisites
 
 - Kubernetes 1.24+

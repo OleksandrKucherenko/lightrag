@@ -1,6 +1,17 @@
 # LightRAG Kubernetes Deployment
 
-This directory contains Kubernetes manifests for deploying the LightRAG stack in a Kubernetes cluster. The configuration mirrors the docker-compose setup but is optimized for Kubernetes orchestration.
+This directory contains **plain Kubernetes manifests** for deploying the LightRAG stack. These are static YAML files ready for `kubectl apply`.
+
+> **Note**: This is one of two deployment options. For production with customization, see the [Helm Chart](../helm/lightrag/). For a complete comparison, see [DEPLOYMENT_STRATEGY.md](../DEPLOYMENT_STRATEGY.md).
+
+## Why Use Plain Manifests?
+
+✅ **Simplicity**: No additional tools required (just kubectl)
+✅ **Transparency**: Easy to inspect and understand
+✅ **Learning**: Great for learning Kubernetes
+✅ **Quick Start**: Deploy in minutes with `kubectl apply`
+
+**Alternative**: For environment-specific deployments, version management, and easier customization, use the [Helm Chart](../helm/lightrag/).
 
 ## Table of Contents
 

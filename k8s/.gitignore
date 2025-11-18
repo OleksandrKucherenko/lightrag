@@ -8,6 +8,10 @@ secrets/*.yaml
 # Allow the template file (has only placeholders)
 !02-secrets.yaml
 
+# Generated manifests from Helm
+generated/
+*.generated.yaml
+
 # Environment-specific configurations
 *.local.yaml
 *.prod.yaml

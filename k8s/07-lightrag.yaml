@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
       - name: lightrag
-        image: ghcr.io/hkuds/lightrag:latest
+        image: ghcr.io/hkuds/lightrag:0.0.5
         ports:
         - name: http
           containerPort: 9621

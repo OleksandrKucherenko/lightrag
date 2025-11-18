@@ -385,7 +385,7 @@ spec:
     spec:
       containers:
       - name: lightrag
-        image: ghcr.io/hkuds/lightrag:latest
+        image: ghcr.io/hkuds/lightrag:0.0.5
         ports:
         - containerPort: 9621
 EOF
@@ -731,7 +731,7 @@ metadata:
   namespace: lightrag-replica
 spec:
   replicas: 1
-  image: qdrant/qdrant:latest
+  image: qdrant/qdrant:v1.10.1
   bootstrap:
     expectPeers: 1
     bootstrapTimeout: 30s

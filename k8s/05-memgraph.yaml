@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
       - name: memgraph
-        image: memgraph/memgraph:latest
+        image: memgraph/memgraph:2.18.1
         ports:
         - name: bolt
           containerPort: 7687
@@ -115,7 +115,7 @@ spec:
     spec:
       containers:
       - name: memgraph-lab
-        image: memgraph/lab:latest
+        image: memgraph/lab:2.14.1
         ports:
         - name: http
           containerPort: 3000

@@ -86,6 +86,90 @@ See `values.yaml` for all configuration options.
 | `ingress.enabled` | Enable Ingress | `true` |
 | `secrets.*` | Various secrets | See values.yaml |
 
+### Customizing Resources, Ports, and Image Versions
+
+**All resources, ports, and image versions are fully parameterized** in `values.yaml` for easy customization:
+
+#### Resource Limits and Requests
+
+```bash
+# Override CPU/RAM for specific services
+helm install lightrag . \
+  --set lightrag.resources.limits.cpu="4000m" \
+  --set lightrag.resources.limits.memory="8Gi" \
+  --set lightrag.resources.requests.cpu="2000m" \
+  --set lightrag.resources.requests.memory="4Gi" \
+  --set qdrant.resources.limits.memory="6Gi"
+```
+
+Or in `values.yaml`:
+
+```yaml
+lightrag:
+  resources:
+    limits:
+      cpu: 4000m
+      memory: 8Gi
+    requests:
+      cpu: 2000m
+      memory: 4Gi
+
+qdrant:
+  resources:
+    limits:
+      cpu: 3000m
+      memory: 6Gi
+```
+
+#### Service Ports
+
+```bash
+# Change service ports if needed
+helm install lightrag . \
+  --set lightrag.service.port=9621 \
+  --set lobechat.service.port=3210 \
+  --set redis.service.port=6379
+```
+
+#### Image Versions
+
+**Important**: We use specific image tags (not `:latest`) for production stability:
+
+```bash
+# Override image versions
+helm install lightrag . \
+  --set lightrag.image.tag="0.0.6" \
+  --set qdrant.image.tag="v1.11.0" \
+  --set lobechat.image.tag="v1.18.0"
+```
+
+Or in `values.yaml`:
+
+```yaml
+lightrag:
+  image:
+    repository: ghcr.io/hkuds/lightrag
+    tag: "0.0.6"  # Specify exact version
+    pullPolicy: IfNotPresent
+
+qdrant:
+  image:
+    repository: qdrant/qdrant
+    tag: "v1.11.0"  # Specific version
+    pullPolicy: IfNotPresent
+```
+
+**Current default versions**:
+- **redis**: `8-alpine`
+- **memgraph**: `2.18.1`
+- **memgraph-lab**: `2.14.1`
+- **qdrant**: `v1.10.1`
+- **lightrag**: `0.0.5`
+- **lobe-chat**: `v1.17.12`
+- **isaiah**: `1.30.0`
+
+These can all be overridden via `--set` flags or custom `values.yaml` file.
+
 ## Upgrading
 
 ```bash

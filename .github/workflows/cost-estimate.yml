@@ -169,6 +169,11 @@ jobs:
           CIVO_DAILY=$(echo "scale=2; ${{ steps.costs.outputs.civo_diff }} / 30" | bc)
           CIVO_YEARLY=$(echo "scale=2; ${{ steps.costs.outputs.civo_diff }} * 12" | bc)
 
+          # Get commit hash and timestamp
+          COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
+          COMMIT_SHORT="${COMMIT_SHA:0:7}"
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
           # Determine change status
           CPU_CHANGE=${{ steps.costs.outputs.cpu_change }}
           RAM_CHANGE=${{ steps.costs.outputs.ram_change }}
@@ -185,6 +190,9 @@ jobs:
           # Create markdown report using cat with variable expansion
           cat > /tmp/cost-report.md << EOFMARKER
           ## 💰 Cost Impact Analysis
+
+          > **Analysis based on commit:** [\`${COMMIT_SHORT}\`](${{ github.event.pull_request.head.repo.html_url }}/commit/${COMMIT_SHA})
+          > **Generated at:** ${TIMESTAMP}
 
           ### Resource Changes
 
@@ -219,6 +227,9 @@ jobs:
           _Estimates based on standard instance pricing as of 2024. Actual costs may vary based on region, discounts, and usage patterns._
 
           📊 For real-time cost monitoring after deployment, see [Cost Monitoring Guide](../blob/main/k8s/COST_MONITORING.md)
+
+          ---
+          <sub>🤖 This comment will be automatically updated when new commits are pushed.</sub>
           EOFMARKER
 
       - name: Post cost estimate as PR comment
@@ -228,19 +239,20 @@ jobs:
             const fs = require('fs');
             const costReport = fs.readFileSync('/tmp/cost-report.md', 'utf8');
 
-            // Find existing bot comment
+            // Find existing cost analysis comment from this bot
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
 
-            const botComment = comments.find(comment =>
-              comment.user.type === 'Bot' &&
-              comment.body.includes('💰 Cost Impact Analysis')
-            );
-
-            const commentBody = costReport;
+            // Look for existing cost analysis comment
+            // Check both user.type === 'Bot' and user.login === 'github-actions[bot]'
+            const botComment = comments.find(comment => {
+              const isBot = comment.user.type === 'Bot' || comment.user.login === 'github-actions[bot]';
+              const hasCostAnalysis = comment.body.includes('💰 Cost Impact Analysis');
+              return isBot && hasCostAnalysis;
+            });
 
             if (botComment) {
               // Update existing comment
@@ -248,19 +260,22 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 comment_id: botComment.id,
-                body: commentBody
+                body: costReport
               });
-              console.log('Updated existing cost estimate comment');
+              console.log(`✅ Updated existing cost estimate comment (ID: ${botComment.id})`);
+              console.log(`   Previous commit was tracked in comment ${botComment.id}`);
             } else {
               // Create new comment
-              await github.rest.issues.createComment({
+              const { data: newComment } = await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                body: commentBody
+                body: costReport
               });
-              console.log('Created new cost estimate comment');
+              console.log(`✅ Created new cost estimate comment (ID: ${newComment.id})`);
             }
+
+            console.log(`📊 Cost analysis for commit: ${{ github.event.pull_request.head.sha }}`)
 
       - name: Generate cost summary for job summary
         run: |

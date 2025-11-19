@@ -1,25 +1,46 @@
 ---
+# LightRAG Lightweight Deployment
+#
+# Minimal single-pod deployment with built-in storage backends
+# Perfect for development, testing, and demos
+#
+# Resources: 1 CPU, 2Gi RAM (vs 10+ CPU, 20+ Gi for full stack)
+#
+# Usage:
+#   kubectl apply -f ../00-namespace.yaml
+#   kubectl apply -f lightweight-configmap.yaml
+#   kubectl apply -f ../02-secrets.yaml
+#   kubectl apply -f lightweight-deployment.yaml
+#
+# Access:
+#   kubectl port-forward -n lightrag svc/lightrag-lightweight 9621:9621
+#   curl http://localhost:9621/health
+#
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: lightrag
+  name: lightrag-lightweight
   namespace: lightrag
   labels:
     app.kubernetes.io/name: lightrag
     app.kubernetes.io/component: application
     app.kubernetes.io/part-of: lightrag-stack
+    deployment-mode: lightweight
 spec:
   replicas: 1
   strategy:
-    type: Recreate  # Prevents PVC attachment conflicts with single replica
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: lightrag
+      deployment-mode: lightweight
   template:
     metadata:
       labels:
         app.kubernetes.io/name: lightrag
         app.kubernetes.io/component: application
+        deployment-mode: lightweight
     spec:
       containers:
       - name: lightrag
@@ -45,7 +66,8 @@ spec:
             configMapKeyRef:
               name: lightrag-config
               key: WORKERS
-        # Storage Configuration
+
+        # Storage Configuration (Lightweight)
         - name: LIGHTRAG_KV_STORAGE
           valueFrom:
             configMapKeyRef:
@@ -61,32 +83,7 @@ spec:
             configMapKeyRef:
               name: lightrag-config
               key: LIGHTRAG_GRAPH_STORAGE
-        # Database URLs
-        - name: REDIS_HOST
-          valueFrom:
-            configMapKeyRef:
-              name: lightrag-config
-              key: REDIS_HOST
-        - name: REDIS_PORT
-          valueFrom:
-            configMapKeyRef:
-              name: lightrag-config
-              key: REDIS_PORT
-        - name: REDIS_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: lightrag-secrets
-              key: REDIS_PASSWORD
-        - name: QDRANT_URL
-          valueFrom:
-            configMapKeyRef:
-              name: lightrag-config
-              key: QDRANT_URL
-        - name: MEMGRAPH_URI
-          valueFrom:
-            configMapKeyRef:
-              name: lightrag-config
-              key: MEMGRAPH_URI
+
         # LLM Configuration
         - name: LLM_BINDING
           valueFrom:
@@ -108,6 +105,7 @@ spec:
             configMapKeyRef:
               name: lightrag-config
               key: EMBEDDING_MODEL
+
         # API Keys (Secrets)
         - name: LLM_BINDING_API_KEY
           valueFrom:
@@ -119,6 +117,7 @@ spec:
             secretKeyRef:
               name: lightrag-secrets
               key: EMBEDDING_BINDING_API_KEY
+
         # Performance Configuration
         - name: MAX_PARALLEL_INSERT
           valueFrom:
@@ -150,6 +149,7 @@ spec:
             configMapKeyRef:
               name: lightrag-config
               key: EMBEDDING_BATCH_SIZE
+
         volumeMounts:
         - name: storage
           mountPath: /app/data/rag_storage
@@ -157,13 +157,16 @@ spec:
           mountPath: /app/data/inputs
         - name: logs
           mountPath: /app/logs
+
+        # Reduced resources for lightweight mode
         resources:
           limits:
-            memory: 4Gi
-            cpu: 2000m
-          requests:
             memory: 2Gi
             cpu: 1000m
+          requests:
+            memory: 1Gi
+            cpu: 500m
+
         livenessProbe:
           httpGet:
             path: /health
@@ -173,6 +176,7 @@ spec:
           timeoutSeconds: 5
           successThreshold: 1
           failureThreshold: 3
+
         readinessProbe:
           httpGet:
             path: /health
@@ -182,6 +186,7 @@ spec:
           timeoutSeconds: 2
           successThreshold: 1
           failureThreshold: 3
+
       volumes:
       - name: storage
         persistentVolumeClaim:
@@ -197,11 +202,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: lightrag
+  name: lightrag-lightweight
   namespace: lightrag
   labels:
     app.kubernetes.io/name: lightrag
     app.kubernetes.io/component: application
+    deployment-mode: lightweight
 spec:
   type: ClusterIP
   ports:
@@ -211,3 +217,49 @@ spec:
     name: http
   selector:
     app.kubernetes.io/name: lightrag
+    deployment-mode: lightweight
+
+---
+# Optional: Ephemeral storage alternative (no PVC required)
+# Uncomment this deployment and comment out the one above for truly ephemeral storage
+#
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: lightrag-ephemeral
+#   namespace: lightrag
+#   labels:
+#     app.kubernetes.io/name: lightrag
+#     deployment-mode: ephemeral
+# spec:
+#   replicas: 1
+#   strategy:
+#     type: Recreate
+#   selector:
+#     matchLabels:
+#       app.kubernetes.io/name: lightrag
+#       deployment-mode: ephemeral
+#   template:
+#     metadata:
+#       labels:
+#         app.kubernetes.io/name: lightrag
+#         deployment-mode: ephemeral
+#     spec:
+#       containers:
+#       - name: lightrag
+#         image: ghcr.io/hkuds/lightrag:0.0.5
+#         # ... (same env vars as above)
+#         volumeMounts:
+#         - name: storage
+#           mountPath: /app/data/rag_storage
+#         - name: inputs
+#           mountPath: /app/data/inputs
+#         - name: logs
+#           mountPath: /app/logs
+#       volumes:
+#       - name: storage
+#         emptyDir: {}  # Temporary storage, deleted on pod removal
+#       - name: inputs
+#         emptyDir: {}
+#       - name: logs
+#         emptyDir: {}

@@ -67,6 +67,99 @@ The secret detection runs automatically at two points:
    - Prevents pushing secrets even if pre-commit was bypassed
    - Last line of defense before secrets reach the remote
 
+3. **CI/CD** - Automated checks on GitHub
+   - Runs on all pull requests and pushes to main branches
+   - Independent verification even if local hooks are bypassed
+   - Blocks merging if secrets are detected
+   - Posts results as PR comments
+
+### CI Integration
+
+Secret detection also runs automatically on GitHub Actions for all pull requests and pushes to protected branches. This provides an additional safety layer that cannot be bypassed.
+
+#### GitHub Actions Workflow
+
+The `.github/workflows/secret-detection.yml` workflow:
+
+**Triggers on:**
+- Pull requests (opened, synchronized, reopened)
+- Pushes to `main`, `master`, `develop`, and `release/**` branches
+- Manual workflow dispatch
+
+**Jobs:**
+
+1. **Gitleaks Job**
+   - Scans entire repository history
+   - Uses `.gitleaks.toml` configuration
+   - Uploads results to GitHub Security tab (SARIF format)
+   - Fails the build if secrets are found
+
+2. **TruffleHog Job**
+   - Performs deep scan with verification
+   - Uses `.trufflehog.yaml` configuration
+   - Only reports verified secrets
+   - Fails the build if verified secrets are found
+
+3. **Post Results Job**
+   - Runs after both scanners complete
+   - Posts a summary comment on pull requests
+   - Updates existing comments instead of creating duplicates
+   - Provides clear action items if secrets are detected
+
+#### Viewing CI Results
+
+**In Pull Requests:**
+- Automated comment shows scan results in a table format
+- Clear ✅/❌ status for each scanner
+- Action items if secrets are detected
+- Links to SECURITY.md for guidance
+
+**In GitHub Security Tab:**
+- Navigate to **Security** → **Code scanning**
+- View detailed Gitleaks findings
+- Filter by severity, status, and tool
+- Track remediation over time
+
+**In Workflow Logs:**
+- Click on failed workflow run
+- View detailed output from each scanner
+- See exact locations of detected secrets
+
+#### CI Permissions
+
+The workflow requires these permissions:
+- `contents: read` - To checkout code
+- `pull-requests: write` - To post comments
+- `security-events: write` - To upload SARIF reports
+
+#### Bypassing CI (Not Recommended)
+
+**Important:** Unlike local hooks, you cannot bypass CI checks. This is intentional for security.
+
+- CI runs independently of local hooks
+- Even if you use `LEFTHOOK=0` or `--no-verify` locally, CI still runs
+- Pull requests cannot be merged if CI detects secrets
+- This ensures team-wide enforcement
+
+**If you need to bypass for a legitimate reason:**
+1. Document the reason in PR description
+2. Get approval from team lead/security team
+3. Add specific exceptions to `.gitleaks.toml` or `.trufflehog.yaml`
+4. Never bypass for actual secrets - rotate them instead
+
+#### Monitoring and Alerts
+
+**GitHub Notifications:**
+- Workflow failures trigger GitHub notifications
+- Subscribe to repository notifications for security alerts
+- Security tab shows historical scan results
+
+**Best Practices:**
+- Review Security tab regularly
+- Investigate all workflow failures promptly
+- Don't ignore or bypass CI failures
+- Use the opportunity to improve detection rules
+
 ### Configuration Files
 
 - **`.gitleaks.toml`** - Gitleaks configuration
@@ -245,8 +338,11 @@ If hooks are too slow:
 3. **Provide `.env.example`** - With placeholder values
 4. **Encrypt sensitive configs** - Use SOPS/age (already set up in this project)
 5. **Review hook output** - Don't blindly bypass warnings
-6. **Keep configs updated** - Maintain allowlists and exclusions
-7. **Run manual scans** - Periodically scan full repository
+6. **Monitor CI results** - Check GitHub Actions and Security tab regularly
+7. **Keep configs updated** - Maintain allowlists and exclusions
+8. **Run manual scans** - Periodically scan full repository
+9. **Rotate exposed secrets** - If secrets are pushed, rotate them immediately
+10. **Document exceptions** - When adding allowlist entries, document why
 
 ### Secret Storage
 

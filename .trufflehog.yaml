@@ -1,0 +1,137 @@
+# TruffleHog configuration file
+# https://github.com/trufflesecurity/trufflehog
+
+# Only report verified secrets (reduces false positives)
+# This means TruffleHog will actually verify the secret with the service
+only-verified: true
+
+# Scan configuration
+scan:
+  # Include all file types
+  include-all: false
+
+  # Maximum file size to scan (in bytes) - 10MB
+  max-file-size: 10485760
+
+# Paths to exclude from scanning
+exclude:
+  paths:
+    # Secret storage (encrypted)
+    - ".secrets/"
+    - "secrets/"
+    - "*.enc"
+    - "*.encrypted"
+
+    # Dependencies and vendor
+    - "node_modules/"
+    - "vendor/"
+    - ".venv/"
+    - "venv/"
+    - "*.lock"
+
+    # Build outputs
+    - "dist/"
+    - "build/"
+    - "target/"
+    - "out/"
+    - "*.min.js"
+    - "*.bundle.js"
+
+    # IDE and editor
+    - ".idea/"
+    - ".vscode/"
+    - "*.swp"
+    - "*.swo"
+    - "*~"
+
+    # Cache and temporary
+    - ".cache/"
+    - ".tmp/"
+    - "tmp/"
+    - ".DS_Store"
+
+    # Git internals
+    - ".git/"
+
+    # Test fixtures and examples
+    - "testdata/"
+    - "fixtures/"
+    - "examples/"
+    - "*_test.*"
+    - "*.test.*"
+
+    # Documentation
+    - "docs/"
+    - "*.md"
+
+  # File patterns to exclude
+  patterns:
+    # Test and example files
+    - ".*test.*"
+    - ".*mock.*"
+    - ".*fixture.*"
+    - ".*example.*"
+
+    # Lockfiles and dependencies
+    - ".*lock.*"
+    - "package-lock.json"
+    - "yarn.lock"
+    - "pnpm-lock.yaml"
+    - "Pipfile.lock"
+    - "poetry.lock"
+    - "go.sum"
+
+# Detectors to enable/disable
+detectors:
+  # Disable detectors that commonly cause false positives
+  # You can customize this list based on your project needs
+  exclude:
+    # Uncomment to exclude specific detectors
+    # - "generic"
+    # - "uri"
+
+# Verification configuration
+verify:
+  # Timeout for verification requests (in seconds)
+  timeout: 10
+
+  # Retry configuration
+  retries: 2
+
+# Output configuration
+output:
+  # Show only verified secrets
+  only-verified: true
+
+  # Include metadata in output
+  include-metadata: true
+
+# Allow list - secrets to ignore (use with caution)
+allowlist:
+  # Regex patterns to allowlist
+  regexes:
+    # Example patterns (customize based on your needs)
+    - "placeholder_secret"
+    - "example_api_key"
+    - "your_secret_here"
+    - "REPLACE_ME"
+    - "CHANGEME"
+    - "<YOUR_.*>"
+
+    # Common test/example values
+    - "test_.*_key"
+    - "fake_.*_secret"
+    - "dummy_.*_token"
+
+  # Specific strings to allowlist
+  strings:
+    # Add specific secret values to ignore (if absolutely necessary)
+    # - "specific-known-safe-value"
+
+# Advanced: Custom detectors (optional)
+# custom-detectors:
+#   - name: "Custom Secret Pattern"
+#     regex: "custom_pattern_here"
+#     keywords:
+#       - "custom"
+#       - "secret"

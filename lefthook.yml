@@ -1,0 +1,58 @@
+# Lefthook configuration for git hooks
+# https://github.com/evilmartians/lefthook
+
+# Install hooks: lefthook install
+# Skip hooks: LEFTHOOK=0 git commit / git push
+# Run manually: lefthook run pre-commit
+
+# Minimum Lefthook version
+min_version: 1.5.0
+
+# Pre-commit hook - runs before creating a commit
+pre-commit:
+  parallel: true
+  commands:
+    # Gitleaks - Fast secret scanner using regex patterns
+    gitleaks:
+      run: |
+        echo "🔍 Running Gitleaks to detect secrets..."
+        gitleaks detect --verbose --config=.gitleaks.toml --source=.
+      stage_fixed: false
+      fail_text: |
+        ❌ Gitleaks detected secrets in your staged files!
+
+        Please remove the secrets before committing.
+        To skip this check temporarily (not recommended): LEFTHOOK=0 git commit
+
+    # TruffleHog - Deep secret scanner with entropy analysis and verification
+    trufflehog:
+      run: |
+        echo "🔍 Running TruffleHog to detect secrets..."
+        trufflehog git file://. --since-commit HEAD --only-verified --fail --no-update --config=.trufflehog.yaml
+      stage_fixed: false
+      fail_text: |
+        ❌ TruffleHog detected verified secrets in your changes!
+
+        Please remove the secrets before committing.
+        To skip this check temporarily (not recommended): LEFTHOOK=0 git commit
+
+# Pre-push hook - runs before pushing to remote (safety net)
+pre-push:
+  parallel: true
+  commands:
+    # Quick gitleaks scan of commits being pushed
+    gitleaks-push:
+      run: |
+        echo "🔍 Running Gitleaks on commits to be pushed..."
+        gitleaks detect --verbose --config=.gitleaks.toml --log-opts="{push_files}"
+      fail_text: |
+        ❌ Gitleaks detected secrets in commits you're trying to push!
+
+        Please fix the commits before pushing.
+        To skip this check temporarily (not recommended): LEFTHOOK=0 git push
+
+# Commit message hook - ensures commit messages follow conventions (optional)
+commit-msg:
+  commands:
+    # You can add commit message linting here if needed
+    # Example: commitlint or other tools

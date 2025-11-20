@@ -1,0 +1,129 @@
+# Gitleaks configuration file
+# https://github.com/gitleaks/gitleaks
+
+title = "Gitleaks Configuration for LightRAG"
+
+# Extend the default gitleaks config with custom rules
+[extend]
+# Use the default gitleaks rules as a base
+useDefault = true
+
+# Global allowlist - patterns to ignore across all rules
+[allowlist]
+description = "Global allowlist for LightRAG project"
+
+# Ignore specific paths that are known to be safe
+paths = [
+    # Test files and fixtures
+    '''.*_test\..*''',
+    '''.*\.test\..*''',
+    '''.*tests/.*fixtures/.*''',
+    '''.*testdata/.*''',
+
+    # Documentation and examples
+    '''README\.md''',
+    '''CONTRIBUTING\.md''',
+    '''docs/.*\.md''',
+    '''examples/.*''',
+
+    # Build and dependency files
+    '''package-lock\.json''',
+    '''yarn\.lock''',
+    '''pnpm-lock\.yaml''',
+    '''Pipfile\.lock''',
+    '''poetry\.lock''',
+    '''go\.sum''',
+
+    # Git and tool configs
+    '''\.git/.*''',
+    '''\.github/.*\.yml''',
+    '''\.gitleaks\.toml''',
+]
+
+# Ignore specific regex patterns
+regexes = [
+    # Example patterns (adjust based on your needs)
+    '''placeholder_secret''',
+    '''example_api_key''',
+    '''your_secret_here''',
+    '''<YOUR_.*>''',
+    '''REPLACE_ME''',
+]
+
+# Ignore specific commits by hash (if you have pre-existing secrets to exclude)
+commits = [
+    # Add commit hashes here if needed
+]
+
+# Custom rules for project-specific secrets
+[[rules]]
+id = "kubernetes-secret-env"
+description = "Kubernetes secret environment variables"
+regex = '''(?i)(k8s_secret|kubernetes_secret|k8s_password)[\s]*[=:][\s]*['"]?[a-zA-Z0-9_\-]{8,}['"]?'''
+tags = ["kubernetes", "secret", "env"]
+[[rules.Entropies]]
+    Min = "3.5"
+    Max = "8"
+
+[[rules]]
+id = "age-secret-key"
+description = "AGE encryption secret key"
+regex = '''AGE-SECRET-KEY-1[A-Z0-9]{58}'''
+tags = ["age", "encryption", "secret"]
+
+[[rules]]
+id = "sops-key"
+description = "SOPS encryption key pattern"
+regex = '''(?i)(sops[_-]?key|age[_-]?key)[\s]*[=:][\s]*['"]?[A-Za-z0-9+/]{32,}={0,2}['"]?'''
+tags = ["sops", "encryption", "secret"]
+
+# Custom allowlist for specific rules
+[allowlist.regexTarget]
+# Allow age public keys (these are meant to be shared)
+regexes = [
+    '''age1[a-z0-9]{58}''',  # AGE public keys are safe
+]
+
+# Commit configuration
+[commit]
+since = ""
+until = ""
+depth = 100
+
+# File scanning configuration
+[scan]
+# Maximum file size to scan (in bytes) - 1MB default
+maxFileSizeKB = 1024
+
+# Additional paths to always ignore
+[scan.paths]
+exclude = [
+    # Secret storage (encrypted)
+    ".secrets/",
+    "secrets/",
+
+    # Node modules and vendor directories
+    "node_modules/",
+    "vendor/",
+    ".venv/",
+    "venv/",
+
+    # Build outputs
+    "dist/",
+    "build/",
+    "target/",
+    "bin/",
+
+    # IDE and editor files
+    ".idea/",
+    ".vscode/",
+    "*.swp",
+    "*.swo",
+    "*~",
+
+    # Cache and temp files
+    ".cache/",
+    ".tmp/",
+    "tmp/",
+    ".DS_Store",
+]

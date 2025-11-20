@@ -50,6 +50,10 @@ run = '''
     powershell.exe -NoProfile -Command "hostctl list lightrag"
 '''
 
+[tasks.setup-git-hooks]
+description = "Install git hooks for secret detection (gitleaks, trufflehog)"
+run = ["./bin/01-setup-git-hooks.sh"]
+
 [hooks]
 enter = ["mise run setup"]
 
@@ -58,3 +62,8 @@ age = "latest"
 hostctl = "latest"
 mkcert = "latest"
 sops = "latest"
+# Secret detection tools
+gitleaks = "latest"
+trufflehog = "latest"
+# Git hooks manager
+lefthook = "latest"

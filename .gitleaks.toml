@@ -48,6 +48,9 @@ regexes = [
     '''your_secret_here''',
     '''<YOUR_.*>''',
     '''REPLACE_ME''',
+
+    # AGE public keys (safe to share, only private keys are secret)
+    '''age1[a-z0-9]{58}''',
 ]
 
 # Ignore specific commits by hash (if you have pre-existing secrets to exclude)
@@ -76,13 +79,6 @@ id = "sops-key"
 description = "SOPS encryption key pattern"
 regex = '''(?i)(sops[_-]?key|age[_-]?key)[\s]*[=:][\s]*['"]?[A-Za-z0-9+/]{32,}={0,2}['"]?'''
 tags = ["sops", "encryption", "secret"]
-
-# Custom allowlist for specific rules
-[allowlist.regexTarget]
-# Allow age public keys (these are meant to be shared)
-regexes = [
-    '''age1[a-z0-9]{58}''',  # AGE public keys are safe
-]
 
 # Commit configuration
 [commit]

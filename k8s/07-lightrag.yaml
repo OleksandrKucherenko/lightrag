@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
       - name: lightrag
-        image: ghcr.io/hkuds/lightrag:0.0.5
+        image: ghcr.io/hkuds/lightrag:v1.4.9.8-lite
         ports:
         - name: http
           containerPort: 9621
@@ -75,6 +75,8 @@ spec:
             secretKeyRef:
               name: lightrag-secrets
               key: REDIS_PASSWORD
+        - name: REDIS_URI
+          value: "redis://:$(REDIS_PASSWORD)@$(REDIS_HOST):$(REDIS_PORT)/0"
         - name: QDRANT_URL
           valueFrom:
             configMapKeyRef:

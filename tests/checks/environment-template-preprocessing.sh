@@ -23,10 +23,13 @@ TEMPLATE_PATH="${REPO_ROOT}/.etchosts"
 TEMPLATE_EXISTS=$([[ -f "$TEMPLATE_PATH" ]] && echo "true" || echo "false")
 
 # THEN: Exit if template doesn't exist
-[[ "$TEMPLATE_EXISTS" == "false" ]] && { echo "$BROKEN_MISSING"; exit 0; }
+[[ "$TEMPLATE_EXISTS" == "false" ]] && {
+    echo "$BROKEN_MISSING"
+    exit 0
+}
 
 # WHEN: Get detected host IP
-HOST_IP_SCRIPT="${REPO_ROOT}/bin/get-host-ip.sh"
+HOST_IP_SCRIPT="${REPO_ROOT}/scripts/get-host-ip.sh"
 HOST_IP_EXISTS=$([[ -x "$HOST_IP_SCRIPT" ]] && echo "true" || echo "false")
 
 if [[ "$HOST_IP_EXISTS" == "true" ]]; then
@@ -40,11 +43,14 @@ export HOST_IP="${DETECTED_IP:-127.0.0.1}"
 export PUBLISH_DOMAIN="${PUBLISH_DOMAIN:-dev.localhost}"
 
 # WHEN: Test template preprocessing
-PREPROCESSED=$(clean_output "$(envsubst < "$TEMPLATE_PATH" 2>&1)") || PREPROCESSED="FAILED"
+PREPROCESSED=$(clean_output "$(envsubst <"$TEMPLATE_PATH" 2>&1)") || PREPROCESSED="FAILED"
 PREPROCESS_SUCCESS=$([[ "$PREPROCESSED" != "FAILED" ]] && echo "true" || echo "false")
 
 # THEN: Exit if preprocessing failed
-[[ "$PREPROCESS_SUCCESS" == "false" ]] && { echo "$BROKEN_PREPROCESS"; exit 0; }
+[[ "$PREPROCESS_SUCCESS" == "false" ]] && {
+    echo "$BROKEN_PREPROCESS"
+    exit 0
+}
 
 # WHEN: Check if variables were substituted
 CONTAINS_IP=$([[ "$PREPROCESSED" == *"$HOST_IP"* ]] && echo "true" || echo "false")

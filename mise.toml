@@ -15,12 +15,12 @@ _.file = [".env.secrets.json", ".env"]
 
 [tasks.setup]
 description = "Pre-configure project folders"
-run = ["./bin/00-setup-folders.sh"]
+run = ["./scripts/00-setup-folders.sh"]
 
 [tasks.hosts-update]
 description = "Update /etc/hosts with resolved PUBLISH_DOMAIN using hostctl"
 run = '''
-export HOST_IP=$(bin/get-host-ip.sh)
+export HOST_IP=$(scripts/get-host-ip.sh)
 export PUBLISH_DOMAIN=${PUBLISH_DOMAIN:-dev.localhost}
 TEMP=$(mktemp); envsubst < .etchosts > "$TEMP"
 sudo hostctl replace lightrag --from "$TEMP"
@@ -39,7 +39,7 @@ description = "Update Windows hosts file from WSL2 using PowerShell and hostctl"
 run = '''
     echo "Detecting docker host ip... (it is slow, wait please)"
     export TEMP="/mnt/c/tmp/.etchosts.lightrag.windows"
-    export HOST_IP=$(bin/get-host-ip.sh)
+    export HOST_IP=$(scripts/get-host-ip.sh)
     export PUBLISH_DOMAIN=${PUBLISH_DOMAIN:-dev.localhost}
     echo "HOST_IP: $HOST_IP" "$PUBLISH_DOMAIN"
     envsubst < .etchosts > "$TEMP"
@@ -50,11 +50,81 @@ run = '''
     powershell.exe -NoProfile -Command "hostctl list lightrag"
 '''
 
+[tasks.k8s-cluster-create]
+description = "Create KIND cluster for local K8s development"
+run = '''
+if kind get clusters | grep -q "^lightrag$"; then
+    echo "✓ KIND cluster 'lightrag' already exists"
+else
+    echo "Creating KIND cluster 'lightrag'..."
+    kind create cluster --name lightrag
+    echo "✓ Cluster created successfully"
+fi
+kubectl cluster-info --context kind-lightrag
+'''
+
+[tasks.k8s-cluster-delete]
+description = "Delete KIND cluster"
+run = '''
+if kind get clusters | grep -q "^lightrag$"; then
+    echo "Deleting KIND cluster 'lightrag'..."
+    kind delete cluster --name lightrag
+    echo "✓ Cluster deleted"
+else
+    echo "⚠ Cluster 'lightrag' does not exist"
+fi
+'''
+
+[tasks.k8s-secrets-generate]
+description = "Generate K8s secrets from mise environment variables"
+run = "./scripts/k8s-generate-secrets.sh"
+
+[tasks.k8s-deploy]
+description = "Deploy LightRAG stack to K8s using mise-managed secrets"
+run = "./scripts/k8s-deploy.sh --apply"
+
+[tasks.k8s-verify]
+description = "Quick verification of K8s deployment"
+run = "./scripts/k8s-deploy.sh --verify"
+
+[tasks.k8s-status]
+description = "Show K8s deployment status (pods, services, access info)"
+run = "./scripts/k8s-deploy.sh --status"
+
+[tasks.k8s-logs]
+description = "View K8s pod logs (usage: mise run k8s-logs -- <pod-name>)"
+run = "./scripts/k8s-deploy.sh --logs $@"
+
+[tasks.k8s-delete]
+description = "Delete K8s deployment"
+run = "./scripts/k8s-deploy.sh --delete"
+
+[tasks.k8s-port-forward]
+description = "Port forward K8s services to localhost"
+run = '''
+echo "Starting port forwarding..."
+echo "LobeChat: http://localhost:3210"
+echo "LightRAG: http://localhost:9621"
+echo "Memgraph Lab: http://localhost:3000"
+echo ""
+echo "Press Ctrl+C to stop all forwarding"
+kubectl port-forward -n lightrag svc/lobechat 3210:3210 &
+PID1=$!
+kubectl port-forward -n lightrag svc/lightrag 9621:9621 &
+PID2=$!
+kubectl port-forward -n lightrag svc/memgraph-lab 3000:3000 &
+PID3=$!
+trap "kill $PID1 $PID2 $PID3 2>/dev/null" EXIT
+wait
+'''
+
 [hooks]
 enter = ["mise run setup"]
 
 [tools]
 age = "latest"
 hostctl = "latest"
+kind = "latest"
+kubectl = "latest"
 mkcert = "latest"
 sops = "latest"

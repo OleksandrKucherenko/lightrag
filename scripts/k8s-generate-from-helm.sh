@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# Generate plain Kubernetes manifests from Helm chart
+# Generate Kubernetes manifests from Helm chart
 # This script creates k8s/generated/ directory with manifests from Helm templates
 #
 # Usage:
-#   ./generate-from-helm.sh [output-dir] [values-file]
+#   ./scripts/k8s-generate-from-helm.sh [output-dir] [values-file]
 #
 # Examples:
-#   ./generate-from-helm.sh                          # Generate to k8s/generated/
-#   ./generate-from-helm.sh ../deploy                # Generate to ../deploy/
-#   ./generate-from-helm.sh . my-values.yaml         # Generate here with custom values
+#   ./scripts/k8s-generate-from-helm.sh                  # Generate to k8s/generated/
+#   ./scripts/k8s-generate-from-helm.sh ../deploy        # Generate to ../deploy/
+#   ./scripts/k8s-generate-from-helm.sh k8s/generated my-values.yaml  # Custom values
 #
 
 set -e
@@ -21,19 +21,19 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 # Default configuration
-OUTPUT_DIR="${1:-generated}"
+OUTPUT_DIR="${1:-k8s/generated}"
 VALUES_FILE="${2:-}"
-HELM_CHART="../helm/lightrag"
+HELM_CHART="helm/lightrag"
 RELEASE_NAME="lightrag"
 NAMESPACE="lightrag"
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║          Generate Plain K8s Manifests from Helm Chart             ║${NC}"
+echo -e "${BLUE}║          Generate Plain K8s Manifests from Helm Chart              ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
 # Check if Helm is installed
-if ! command -v helm &> /dev/null; then
+if ! command -v helm &>/dev/null; then
     echo -e "${YELLOW}⚠  Helm not found. Installing is recommended but not required.${NC}"
     echo ""
     echo "To install Helm:"
@@ -76,7 +76,7 @@ echo "Generating manifests..."
 echo ""
 
 # Generate all manifests
-$HELM_CMD > "$OUTPUT_DIR/lightrag-all.yaml"
+$HELM_CMD >"$OUTPUT_DIR/lightrag-all.yaml"
 
 echo -e "${GREEN}✓${NC} Generated: $OUTPUT_DIR/lightrag-all.yaml (all resources)"
 

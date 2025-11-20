@@ -21,8 +21,8 @@ helm template lightrag . --namespace lightrag > output.yaml
 helm template lightrag . --namespace lightrag -f my-values.yaml > output.yaml
 
 # Generate to k8s/generated/ directory
-cd ../../k8s
-./generate-from-helm.sh
+cd ../..
+./scripts/k8s-generate-from-helm.sh
 ```
 
 ## Template Files
@@ -60,11 +60,11 @@ helm template lightrag . --namespace lightrag > ../../../k8s/generated/all.yaml
 
 ## Relationship to k8s/ Directory
 
-| Directory | Purpose | When to Use |
-|-----------|---------|-------------|
-| `k8s/` | Simple, static manifests | Quick deployments, learning, testing |
-| `helm/lightrag/` | Templated, configurable | Production, multi-environment, automation |
-| `k8s/generated/` | Generated from Helm | When you need plain YAML from Helm values |
+| Directory        | Purpose                  | When to Use                               |
+| ---------------- | ------------------------ | ----------------------------------------- |
+| `k8s/`           | Simple, static manifests | Quick deployments, learning, testing      |
+| `helm/lightrag/` | Templated, configurable  | Production, multi-environment, automation |
+| `k8s/generated/` | Generated from Helm      | When you need plain YAML from Helm values |
 
 ## See Also
 

@@ -18,12 +18,12 @@ k8s/
 ├── 09-monitor.yaml            # Monitor Deployment + Service
 ├── 10-ingress.yaml            # Ingress configuration
 ├── kustomization.yaml         # Kustomize configuration
-├── deploy.sh                  # Deployment helper script
-├── validate.sh                # Validation script (78 checks)
 ├── README.md                  # Full documentation
 ├── MANIFEST.md                # This file
 ├── TESTING.md                 # Testing guide with Kind
 └── CLOUD_DEPLOYMENT.md        # Cloud provider deployment guides
+
+Note: Deployment scripts (deploy.sh, validate.sh, generate-*.sh) moved to ../scripts/ folder
 ```
 
 ## Resource Breakdown
@@ -183,7 +183,7 @@ kubectl apply -f k8s/
 kubectl apply -k k8s/
 
 # Deploy with helper script
-./k8s/deploy.sh --apply
+./scripts/k8s-deploy.sh --apply
 
 # Check status
 kubectl get all -n lightrag

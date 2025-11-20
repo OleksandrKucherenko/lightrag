@@ -276,7 +276,7 @@ fi
 
 ```bash
 # Automatic HOST_IP detection
-bin/get-host-ip.sh
+scripts/get-host-ip.sh
 # Returns: 127.0.0.1 (Linux/macOS) or 192.168.x.x (WSL2)
 ```
 

@@ -20,6 +20,17 @@ spec:
         app.kubernetes.io/name: memgraph
         app.kubernetes.io/component: database
     spec:
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+      - name: init-permissions
+        image: busybox
+        command: ["sh", "-c", "chown -R 100:101 /var/lib/memgraph /var/log/memgraph && chmod -R 777 /var/lib/memgraph /var/log/memgraph"]
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/memgraph
+        - name: log
+          mountPath: /var/log/memgraph
       containers:
       - name: memgraph
         image: memgraph/memgraph:2.18.1
@@ -42,8 +53,8 @@ spec:
             memory: 8Gi
             cpu: 4000m
           requests:
-            memory: 4Gi
-            cpu: 2000m
+            memory: 1Gi
+            cpu: 500m
         livenessProbe:
           tcpSocket:
             port: 7687
@@ -115,7 +126,7 @@ spec:
     spec:
       containers:
       - name: memgraph-lab
-        image: memgraph/lab:2.14.1
+        image: memgraph/lab:3.6.2
         ports:
         - name: http
           containerPort: 3000

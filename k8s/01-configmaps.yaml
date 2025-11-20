@@ -61,6 +61,6 @@ metadata:
     app.kubernetes.io/component: config
     app.kubernetes.io/name: lobechat
 data:
-  OLLAMA_PROXY_URL: "http://lightrag:9621/v1"
+  OLLAMA_PROXY_URL: "http://lightrag:9621"
   NEXT_PUBLIC_APP_NAME: "LobeChat + LightRAG"
   DEFAULT_AGENT_CONFIG: '{"model":"lightrag","systemRole":"AI assistant with graph knowledge"}'

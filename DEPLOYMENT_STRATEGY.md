@@ -7,13 +7,15 @@ This document explains the deployment options and the relationship between diffe
 ```
 lightrag/
 ├── docker-compose.yaml          # Docker Compose (local development)
+├── scripts/                     # Deployment scripts
+│   ├── k8s-deploy.sh            # K8s deployment helper
+│   ├── k8s-validate.sh          # Validation (78 checks)
+│   ├── k8s-generate-from-helm.sh  # Generate from Helm
+│   └── k8s-generate-secrets.sh  # Generate secrets from mise
 ├── k8s/                         # Plain Kubernetes manifests
 │   ├── 00-namespace.yaml        # Static YAML files
 │   ├── 01-configmaps.yaml       # Ready for kubectl apply
 │   ├── ...                      # No templating
-│   ├── deploy.sh                # Helper script
-│   ├── validate.sh              # Validation (78 checks)
-│   ├── generate-from-helm.sh    # Generate from Helm
 │   └── generated/               # Generated from Helm (git-ignored)
 └── helm/lightrag/               # Helm chart
     ├── Chart.yaml               # Chart metadata
@@ -52,9 +54,8 @@ We maintain TWO deployment paths, each with its own source of truth:
 
 **Usage**:
 ```bash
-cd k8s
-./validate.sh                 # Validate manifests
-kubectl apply -f .            # Deploy everything
+./scripts/k8s-validate.sh     # Validate manifests
+kubectl apply -f k8s/         # Deploy everything
 ```
 
 ### Path 2: Helm Chart (helm/lightrag/)
@@ -98,13 +99,11 @@ helm install lightrag . -f my-production-values.yaml
 If you want the flexibility of Helm but need static YAML:
 
 ```bash
-cd k8s
-
-# Generate to generated/ directory
-./generate-from-helm.sh
+# Generate to k8s/generated/ directory
+./scripts/k8s-generate-from-helm.sh
 
 # Deploy generated manifests
-kubectl apply -f generated/
+kubectl apply -f k8s/generated/
 
 # Or generate with custom values
 helm template lightrag ../helm/lightrag \
@@ -138,15 +137,15 @@ helm template lightrag ../helm/lightrag \
 
 ## 📊 Comparison Table
 
-| Feature | Plain k8s/ | Helm Chart | Generated |
-|---------|------------|------------|-----------|
-| **Simplicity** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
-| **Customization** | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ |
-| **Multi-env** | ⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
-| **Version Control** | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ |
-| **Learning Curve** | Easy | Medium | Easy |
-| **Tools Required** | kubectl | kubectl, helm | kubectl, helm |
-| **Production Ready** | Yes | Yes | Yes |
+| Feature              | Plain k8s/ | Helm Chart    | Generated     |
+| -------------------- | ---------- | ------------- | ------------- |
+| **Simplicity**       | ⭐⭐⭐⭐⭐      | ⭐⭐⭐           | ⭐⭐⭐⭐          |
+| **Customization**    | ⭐⭐         | ⭐⭐⭐⭐⭐         | ⭐⭐⭐⭐          |
+| **Multi-env**        | ⭐          | ⭐⭐⭐⭐⭐         | ⭐⭐⭐           |
+| **Version Control**  | ⭐⭐⭐        | ⭐⭐⭐⭐⭐         | ⭐⭐⭐           |
+| **Learning Curve**   | Easy       | Medium        | Easy          |
+| **Tools Required**   | kubectl    | kubectl, helm | kubectl, helm |
+| **Production Ready** | Yes        | Yes           | Yes           |
 
 ## 🚫 What We DON'T Do (Avoiding Duplication)
 
@@ -168,7 +167,7 @@ We **DO**:
 When you need to update the plain manifests:
 
 1. Edit files in `k8s/*.yaml` directly
-2. Run validation: `cd k8s && ./validate.sh`
+2. Run validation: `./bin/k8s-validate.sh`
 3. Test deployment: `kubectl apply --dry-run=client -f k8s/`
 4. Commit changes
 
@@ -192,8 +191,7 @@ When you need to update Helm configuration:
 If you want to sync:
 ```bash
 # Generate from Helm to k8s/generated/
-cd k8s
-./generate-from-helm.sh
+./scripts/k8s-generate-from-helm.sh
 
 # Review differences
 diff -u 04-redis.yaml generated/*redis*.yaml

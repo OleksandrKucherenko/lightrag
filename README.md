@@ -225,7 +225,7 @@ mise run hosts-remove
 tests/test-host-ip.sh
 
 # Get HOST_IP directly
-bin/get-host-ip.sh
+scripts/get-host-ip.sh
 # Returns: 127.0.0.1 (Linux/macOS) or 192.168.x.x (WSL2)
 ```
 
@@ -328,7 +328,7 @@ WSL_TMP="/mnt/c/Temp/.etchosts.lightrag.windows"
 WIN_TMP="C:\\Temp\\.etchosts.lightrag.windows"
 
 # 2) Resolve variables and prepare temp file
-export HOST_IP=$(bin/get-host-ip.sh)
+export HOST_IP=$(scripts/get-host-ip.sh)
 export PUBLISH_DOMAIN=${PUBLISH_DOMAIN:-dev.localhost}
 envsubst < .etchosts > "$WSL_TMP"
 
